@@ -95,6 +95,10 @@ python train.py
 This reports the phoneme error rate on held-out sentences it never trained on, plus a stress test with 2 s of extra
 silence. The best model is saved to `models/decoder.pt`.
 
+`--features` chooses the input maps: `basic` (default, one map), `size` (+ contact size), `orientation` (+ finger
+angle) or `shape` (both: four 16×10 maps). The model remembers its feature set, so live decoding always matches; the
+web app's Train page has the same choice. Experiments comparing them live in `ablations/`.
+
 **4. Decode live:**
 
 ```bash

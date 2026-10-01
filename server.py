@@ -29,12 +29,15 @@ from fastapi.staticfiles import StaticFiles
 from live import speak
 from model import load_model
 from phonemes import ARPABET, LANGUAGE_PATH, WORD_BREAK, count_sounds, load_inventory, make_prompt
-from signals import BIN_S, CONTACT_STATES, DATA_DIR, HERE, RawTouches, bin_vector, load_trials, remove_last_trial, \
-    save_trial
+from signals import BIN_S, CONTACT_STATES, DATA_DIR, FEATURE_SETS, HERE, RawTouches, bin_vector, load_trials, \
+    remove_last_trial, save_trial
 from streaming import StreamingDecoder
 from trackpad_guard import TrackpadGuard
 
 UI_DIST = os.path.join(HERE, "ui", "dist")
+# A running server keeps the code it started with. If any of these change, the browser says to restart.
+CODE_FILES = ["server.py", "signals.py", "phonemes.py", "streaming.py", "model.py", "trackpad_guard.py", "live.py"]
+STARTED = time.time()
 EPOCH_LINE = re.compile(r"epoch\s+(\d+)\s+loss\s+([\d.]+)\s+held-out phoneme error rate\s+([\d.]+)%"
                         r"\s+\(with 2 s extra silence:\s+([\d.]+)%\)")
 BEST_LINE = re.compile(r"Best model: ([\d.]+)% phoneme error rate")
@@ -100,7 +103,8 @@ class App:
             ck = torch.load(self.model_path, weights_only=False)
             c = ck["config"]
             vocab = ck["vocab"][1:]
-            model.update(vocab=vocab, held_out_per=c.get("held_out_per"), epoch=c.get("epoch"),
+            model.update(vocab=vocab, features=c.get("features", "basic"), held_out_per=c.get("held_out_per"),
+                         epoch=c.get("epoch"),
                          n_train=c.get("n_train"), n_test=c.get("n_test"),
                          trained_at=datetime.fromtimestamp(os.path.getmtime(self.model_path)).isoformat(),
                          missing=[s for s in inventory if s not in vocab])
@@ -115,7 +119,8 @@ class App:
         if self.live:
             live = {k: self.live[k] for k in ("words", "current", "speak", "keep_words")}
         guard = {"available": self.guard.available, "locked": self.guard.locked, "error": self.guard.error}
-        return {"type": "state", "mode": self.mode, "summary": self.summary, "recording": rec, "live": live,
+        stale = [f for f in CODE_FILES if os.path.getmtime(os.path.join(HERE, f)) > STARTED]
+        return {"type": "state", "mode": self.mode, "stale_code": stale, "feature_sets": list(FEATURE_SETS), "summary": self.summary, "recording": rec, "live": live,
                 "training": self.train, "guard": guard, "arpabet": ARPABET, "word_break": WORD_BREAK}
 
     async def send(self, msg, ws=None):
@@ -154,12 +159,13 @@ class App:
             next_t += BIN_S
             await asyncio.sleep(max(0.0, next_t - time.monotonic()))
             frames = self.rt.take()
-            x = bin_vector(frames, self.rt.pad)
+            x = bin_vector(frames, self.rt.pad)  # the activity map: what the grid and raster display
             self.tick += 1
             if self.rec is not None:
                 self.rec["frames"] += frames
             if self.live is not None:
-                await self._live_step(x)
+                features = self.live["features"]  # the model gets the input it was trained on
+                await self._live_step(x if features == "basic" else bin_vector(frames, self.rt.pad, features))
             if self.clients:  # every bin, numbered: the signal raster draws one column per bin
                 await self.send({"type": "grid", "n": self.tick, "v": [round(float(v), 2) for v in x]})
 
@@ -238,10 +244,11 @@ class App:
         if not os.path.exists(self.model_path):
             await self.notice("No model yet -- train one first", "warn")
             return
-        model, vocab, _ = self._model()
+        model, vocab, config = self._model()
         with torch.no_grad():  # warm-up: PyTorch's first call is slow; do it now, not on your first touch
             model(torch.zeros(1, 1, model.inp[0].in_features))
         self.live = {"decoder": StreamingDecoder(model, vocab, keep_words=keep_words), "vocab": vocab,
+                     "features": config.get("features", "basic"),
                      "words": [], "current": [], "speak": speak_words, "keep_words": keep_words}
         self.mode = "live"
         self.guard.block()
@@ -291,14 +298,16 @@ class App:
 
     # ------------------------------------------------------------------ training
 
-    async def train_start(self, epochs):
+    async def train_start(self, epochs, features="basic"):
         if self.train["running"]:
             return
         epochs = max(5, int(epochs))
+        features = features if features in FEATURE_SETS else "basic"
         self.train = {"running": True, "epochs": epochs, "history": [], "result": None, "log": []}
         await self.push_state()
         self._train_proc = await asyncio.create_subprocess_exec(
             sys.executable, "-u", os.path.join(HERE, "train.py"), self.data_dir, "--epochs", str(epochs),
+            "--features", features,
             "--out", self.model_path, cwd=HERE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
         asyncio.create_task(self._train_watch(self._train_proc))
 
@@ -363,7 +372,7 @@ class App:
         elif cmd == "live_clear":
             await self.live_clear()
         elif cmd == "train_start":
-            await self.train_start(msg.get("epochs", 200))
+            await self.train_start(msg.get("epochs", 200), msg.get("features", "basic"))
         elif cmd == "train_stop":
             await self.train_stop()
         elif cmd == "inventory_set":

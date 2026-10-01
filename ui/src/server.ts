@@ -6,6 +6,7 @@ export type Mode = "idle" | "recording" | "live";
 export interface ModelInfo {
   exists: boolean;
   vocab?: string[];
+  features?: string; // which input maps it was trained on
   held_out_per?: number | null; // fraction, 0.138 = 13.8%
   epoch?: number | null;
   n_train?: number | null;
@@ -43,6 +44,8 @@ export interface State {
   guard: { available: boolean; locked: boolean; error: string | null };
   arpabet: Record<string, string>;
   word_break: string;
+  stale_code: string[]; // code files changed since the server started: it needs a restart to use them
+  feature_sets: string[];
 }
 
 export interface LiveFrame {

@@ -12,6 +12,9 @@ models/
 dictionary.json
 language.json
 
+# --- Ablation outputs: data snapshots, logs and models trained on your recordings (the scripts are committed) ---
+ablations/results/
+
 # --- Generated: simulated data (python simulate.py recreates it) ---
 data_sim/
 

@@ -48,7 +48,8 @@ def main():
 
     if not os.path.exists(args.model):
         raise SystemExit(f"No model at {args.model} -- train one first: python train.py")
-    model, vocab, _ = load_model(args.model)
+    model, vocab, config = load_model(args.model)
+    features = config.get("features", "basic")  # feed the model the same input it was trained on
     torch.set_num_threads(1)  # one tiny step every 80 ms: a single thread has the lowest latency
     decoder = StreamingDecoder(model, vocab, keep_words=args.keep_words)
     print(f"Decoding sounds: {' '.join(vocab[1:])}.  Ctrl+C to stop.\n")
@@ -69,7 +70,7 @@ def main():
             while True:
                 next_t += BIN_S
                 time.sleep(max(0.0, next_t - time.monotonic()))
-                show(decoder.push(bin_vector(rt.take(), rt.pad)))
+                show(decoder.push(bin_vector(rt.take(), rt.pad, features)))
         except KeyboardInterrupt:
             show(decoder.flush())
     print()

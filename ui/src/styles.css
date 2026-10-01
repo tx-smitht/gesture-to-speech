@@ -187,3 +187,6 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5p
 .btn-dark:hover:not(:disabled) { background: #1c1c1e; }
 
 .balance-note { margin: -4px 0 18px; }
+
+.banner-strong { background: var(--blue-soft); color: var(--ink); border-bottom-color: #c9d7ff; }
+.chip-dark { background: var(--ink); color: #fff; border-color: var(--ink); }
