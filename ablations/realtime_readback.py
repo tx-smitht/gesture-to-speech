@@ -270,7 +270,7 @@ def decode(args):
         if policy == "sentence end":
             continue
         for _ in range(4):                       # a step can complete more than one word (rare)
-            post, done = dec.posterior()
+            post, done, _ = dec.posterior()
             top = int(post.argmax())
             streak = streak + 1 if top == last_top else 1
             last_top = top

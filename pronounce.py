@@ -4,7 +4,7 @@
     python pronounce.py water something hungry     # look words up
     python pronounce.py --check                    # compare english/pronunciations.txt with the dictionary
     python pronounce.py --add tonight blanket      # append words to english/pronunciations.txt
-    python pronounce.py --download                 # fetch the CMU Pronouncing Dictionary (~3.6 MB)
+    python pronounce.py --download                 # fetch the CMU dictionary (~3.6 MB) + a word-frequency list
 
 Two sources, tried in order:
     1. the CMU Pronouncing Dictionary (english/cmudict.dict): 135k words, hand-checked, the standard that ARPAbet
@@ -27,6 +27,11 @@ from phonemes import ARPABET
 HERE = os.path.dirname(os.path.abspath(__file__))
 CMUDICT = os.path.join(HERE, "english", "cmudict.dict")
 CMUDICT_URL = "https://raw.githubusercontent.com/cmusphinx/cmudict/master/cmudict.dict"
+# The 10,000 most common English words, most common first (Google Web Trillion Word Corpus via Peter Norvig and
+# Josh Kaufman; personal/research use). Used to pick which words the decoder knows and how likely each is.
+COMMON_WORDS = os.path.join(HERE, "english", "common_words.txt")
+COMMON_WORDS_URL = ("https://raw.githubusercontent.com/first20hours/google-10000-english/master/"
+                    "google-10000-english-no-swears.txt")
 PRONUNCIATIONS = os.path.join(HERE, "english", "pronunciations.txt")
 
 # IPA (as espeak-ng writes American English) -> ARPAbet. Longest match first, so "aɪ" wins over "a".
@@ -43,21 +48,22 @@ IGNORE = set("ˈˌː.ˑ̩ ̩˞-")   # stress, length, syllable marks
 
 def download():
     """Fetch with curl (macOS's own certificates; the python.org Python often has none installed), else urllib."""
-    os.makedirs(os.path.dirname(CMUDICT), exist_ok=True)
-    tmp = CMUDICT + ".part"
-    if shutil.which("curl"):
-        subprocess.run(["curl", "-sSfL", "-o", tmp, CMUDICT_URL], check=True)
-    else:
-        urllib.request.urlretrieve(CMUDICT_URL, tmp)
-    os.replace(tmp, CMUDICT)  # only replace a good copy once the download has finished
-    print(f"CMU Pronouncing Dictionary -> {CMUDICT}")
+    for url, path in ((CMUDICT_URL, CMUDICT), (COMMON_WORDS_URL, COMMON_WORDS)):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".part"
+        if shutil.which("curl"):
+            subprocess.run(["curl", "-sSfL", "-o", tmp, url], check=True)
+        else:
+            urllib.request.urlretrieve(url, tmp)
+        os.replace(tmp, path)  # only replace a good copy once the download has finished
+        print(f"{url.rsplit('/', 1)[-1]} -> {path}")
 
 
 _cmu = None
 
 
-def cmudict():
-    """{"water": ("W", "AO", "T", "ER"), ...} -- each word's first (most common) pronunciation."""
+def cmudict_all():
+    """{"read": [("R", "IY", "D"), ("R", "EH", "D")], ...} -- every pronunciation, most common first."""
     global _cmu
     if _cmu is None:
         _cmu = {}
@@ -65,10 +71,20 @@ def cmudict():
             with open(CMUDICT, encoding="latin-1") as f:
                 for line in f:
                     word, *sounds = line.split("#")[0].split()
-                    if not sounds or "(" in word:          # "word(2)" lines are alternative pronunciations
-                        continue
-                    _cmu[word] = tuple(s.rstrip("012") for s in sounds)
+                    if sounds:                            # "word(2)" lines are alternative pronunciations
+                        _cmu.setdefault(word.split("(")[0], []).append(tuple(s.rstrip("012") for s in sounds))
     return _cmu
+
+
+_first = None
+
+
+def cmudict():
+    """{"water": ("W", "AO", "T", "ER"), ...} -- each word's first (most common) pronunciation."""
+    global _first
+    if _first is None:
+        _first = {w: p[0] for w, p in cmudict_all().items()}
+    return _first
 
 
 def ipa_to_arpabet(ipa):

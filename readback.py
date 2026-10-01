@@ -57,11 +57,25 @@ class WordBeamSearch:
     continuous: words may also end WITHOUT a word break -- the next word's first sound starts straight after the
              last word's last sound, and the lexicon + LM work out where one word stops ("some thing" or
              "something"?). Lets someone skip the pause between words.
+    unknown: log-probability penalty for a word that ISN'T in the lexicon (None = only lexicon words allowed).
+             With it, any sound string can still come out -- spoken as the sounds themselves -- but a real word
+             wins whenever the signal fits one about as well. Needed when the person may say things the word
+             list doesn't have (names, calibration prompts of random sounds).
+
+    prefix_guard: a word that is the start of a longer word ("a" -> "aim", "i" -> "ice") is only spoken once the
+             beam has seen it END (its word break), not merely because it's likely. Without context, how often a
+             word is used says nothing about whether the person is done with it.
+
+    A word is either a lexicon unit (an int) or, for unknown words, the tuple of its sounds. The word in progress is
+    a prefix-tree node (int) or, for an unknown word, the tuple of its sounds so far.
     """
 
-    def __init__(self, lexicon, lm, symbols, alpha=0.8, beta=1.0, beam=48, prune=-12.0, continuous=False):
+    def __init__(self, lexicon, lm, symbols, alpha=0.8, beta=1.0, beam=48, prune=-12.0, continuous=False,
+                 unknown=None, prefix_guard=False):
         self.lex, self.lm, self.alpha, self.beta, self.beam, self.prune = lexicon, lm, alpha, beta, beam, prune
-        self.continuous = continuous
+        self.continuous, self.unknown, self.prefix_guard = continuous, unknown, prefix_guard
+        # words that continue into longer words: the end node of their path has more than one word below it
+        self.is_prefix = np.array([lexicon.under[path[-1]].sum() > 1 for path in lexicon.path])
         self.symbols, self.sym = list(symbols), {s: i for i, s in enumerate(symbols)}
         self.blank, self.brk = self.sym[BLANK], self.sym[WORD_BREAK]
         self.on_path = [set(p) for p in lexicon.path]
@@ -88,10 +102,14 @@ class WordBeamSearch:
         j = len(words)
         if j < len(self.committed):          # this word was already spoken: only it is allowed
             u = self.committed[j]
+            if isinstance(u, tuple):         # ...and it was an unknown word, so no lexicon path fits
+                return NEG
             return math.log(s[u]) if node in self.on_path[u] else NEG
         return L[node]
 
     def _last(self, words, node):
+        if isinstance(node, tuple):
+            return self.sym[node[-1]]
         if node:
             return self.sym[self.lex.sound_in[node]]
         return self.brk if words else None
@@ -116,6 +134,21 @@ class WordBeamSearch:
             add((words, node), total + logp[self.blank], NEG)             # blank: nothing new
             if last is not None:
                 add((words, node), NEG, pnb + logp[last])                 # the same symbol held a little longer
+            j = len(words)
+            forced = self.committed[j] if j < len(self.committed) else None
+            if isinstance(node, tuple):                                    # an unknown word: any sound may follow
+                for i in live:
+                    longer = node + (self.symbols[i],)
+                    if forced is None or (isinstance(forced, tuple) and forced[:len(longer)] == longer):
+                        add((words, longer), NEG, (pb if i == last else total) + logp[i])
+                if (forced is None and node not in self.lex.unit_of) or forced == node:
+                    add((words + (node,), 0), NEG, total + logp[self.brk] + self.beta)
+                continue
+            if node == 0 and self.unknown is not None:                    # start an unknown word
+                for i in live:
+                    first = (self.symbols[i],)
+                    if forced is None or (isinstance(forced, tuple) and forced[:1] == first):
+                        add((words, first), NEG, total + logp[i] + self.unknown)
             if node == 0:                                                  # extra word breaks change nothing
                 add((words, node), NEG, (pb if last == self.brk else total) + logp[self.brk])
             here = self._lookahead(words, node) if node or live else 0.0
@@ -148,16 +181,25 @@ class WordBeamSearch:
     # ---- what the beam believes ----
     def posterior(self, k=None):
         """Probability of each word being word number k of the sentence (default: the next one to speak).
-        Returns (vector over units, fraction of the probability where word k is already finished)."""
+        Returns (vector over units, fraction of the probability where word k is already finished,
+        {sounds: probability} for finished unknown words). Unknown words still in progress count towards nothing:
+        they could still become anything."""
         k = len(self.committed) if k is None else k
-        post, done, total = np.zeros(len(self.lex)), 0.0, 0.0
+        post, done, total, unknown = np.zeros(len(self.lex)), 0.0, 0.0, {}
+        ended = np.zeros(len(self.lex))     # the part of post where word k has been seen to END
         top = max(logadd(*v) for v in self.hyps.values())
         for (words, node), (pb, pnb) in self.hyps.items():
             m = math.exp(logadd(pb, pnb) - top)
             total += m
             if len(words) > k:
-                post[words[k]] += m
+                if isinstance(words[k], tuple):
+                    unknown[words[k]] = unknown.get(words[k], 0.0) + m
+                else:
+                    post[words[k]] += m
+                    ended[words[k]] += m
                 done += m
+                continue
+            if len(words) == k and isinstance(node, tuple):
                 continue
             if len(words) == k:              # word k in progress: share m among the words still possible
                 s, L = self._scaled(words)
@@ -168,7 +210,31 @@ class WordBeamSearch:
             z = share.sum()
             if z > 0:
                 post += m * share / z
-        return post / total, done / total
+        self.ended = ended / total
+        return post / total, done / total, {w: m / total for w, m in unknown.items()}
+
+    def decide(self, threshold, deadline=True):
+        """The next word to speak: the most likely one if it is at least `threshold` likely. With `deadline`, once
+        most of the beam has seen the word END (its word break), the best guess is spoken even if it's less sure
+        than that -- so a word is never later than it would be without read-back. Otherwise None (wait)."""
+        post, done, unknown = self.posterior()
+        if self.prefix_guard:              # a word that could still grow counts only once it has ended
+            post = np.where(self.is_prefix, self.ended, post)
+        u = int(post.argmax())
+        w, p = max(unknown.items(), key=lambda kv: kv[1], default=(None, 0.0))
+        if max(post[u], p) >= threshold or (deadline and done >= 0.5):
+            if post[u] >= p:
+                return u
+            return w
+        return None
+
+    def sounds(self, word):
+        """A word (unit id or unknown-word tuple) -> its sounds."""
+        return list(word) if isinstance(word, tuple) else list(self.lex.prons[word])
+
+    def name(self, word):
+        """How to show a word: "see/sea", or the sounds of an unknown word ("S EY M?")."""
+        return " ".join(word) + "?" if isinstance(word, tuple) else self.lex.names[word]
 
     def best(self, finish=True):
         """The single most likely word sequence. finish=True: the sentence is over, so add the LM's end-of-sentence
@@ -176,7 +242,12 @@ class WordBeamSearch:
         scored = []
         for (words, node), v in self.hyps.items():
             score = logadd(*v)
-            if finish:
+            if finish and isinstance(node, tuple):                         # ends on an unknown word: finish it
+                if node in self.lex.unit_of:
+                    continue
+                score += self.beta
+                words = words + (node,)
+            elif finish:
                 u = self.lex.unit_at[node]
                 if node and u is None:
                     continue                                               # stuck in the middle of a word
@@ -188,7 +259,7 @@ class WordBeamSearch:
         return list(max(scored)[1]) if scored else []
 
     def commit(self, u):
-        """Speak unit u as the next word: from now on every hypothesis must agree with it."""
+        """Speak word u (unit id, or sounds tuple for an unknown word) next: every hypothesis must now agree."""
         k = len(self.committed)
         self.committed.append(u)
         keep = {}
@@ -196,7 +267,10 @@ class WordBeamSearch:
             if len(words) > k:
                 ok = words[k] == u
             elif len(words) == k:
-                ok = node in self.on_path[u]
+                if isinstance(u, tuple):
+                    ok = isinstance(node, tuple) and u[:len(node)] == node
+                else:
+                    ok = not isinstance(node, tuple) and node in self.on_path[u]
             else:
                 ok = True                    # still finishing an earlier (already spoken) word
             if ok:

@@ -20,6 +20,7 @@ data_sim/
 
 # --- Downloaded: the CMU Pronouncing Dictionary (python pronounce.py --download, or ./setup.sh) ---
 english/cmudict.dict
+english/common_words.txt
 
 # --- Installed / built by ./setup.sh ---
 .venv/

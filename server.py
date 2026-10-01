@@ -27,11 +27,11 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from live import speak
-from model import load_model
+from model import BLANK, load_model
 from phonemes import ARPABET, LANGUAGE_PATH, WORD_BREAK, count_sounds, load_inventory, make_prompt
 from signals import BIN_S, CONTACT_STATES, DATA_DIR, FEATURE_SETS, HERE, RawTouches, bin_vector, load_trials, \
     remove_last_trial, save_trial
-from streaming import StreamingDecoder
+from streaming import StreamingDecoder, make_readback
 from trackpad_guard import TrackpadGuard
 
 UI_DIST = os.path.join(HERE, "ui", "dist")
@@ -117,7 +117,7 @@ class App:
             rec = {k: self.rec[k] for k in ("prompt", "n", "session")} | {"saved": len(self.rec["saved"])}
         live = None
         if self.live:
-            live = {k: self.live[k] for k in ("words", "current", "speak", "keep_words")}
+            live = {k: self.live[k] for k in ("words", "texts", "current", "speak", "keep_words", "readback")}
         guard = {"available": self.guard.available, "locked": self.guard.locked, "error": self.guard.error}
         stale = [f for f in CODE_FILES if os.path.getmtime(os.path.join(HERE, f)) > STARTED]
         return {"type": "state", "mode": self.mode, "stale_code": stale, "feature_sets": list(FEATURE_SETS), "summary": self.summary, "recording": rec, "live": live,
@@ -238,7 +238,7 @@ class App:
             self._model_cache = (mtime, load_model(self.model_path))
         return self._model_cache[1]
 
-    async def live_start(self, speak_words, keep_words):
+    async def live_start(self, speak_words, keep_words, readback=False):
         if self.mode != "idle":
             return
         if not os.path.exists(self.model_path):
@@ -247,9 +247,16 @@ class App:
         model, vocab, config = self._model()
         with torch.no_grad():  # warm-up: PyTorch's first call is slow; do it now, not on your first touch
             model(torch.zeros(1, 1, model.inp[0].in_features))
-        self.live = {"decoder": StreamingDecoder(model, vocab, keep_words=keep_words), "vocab": vocab,
-                     "features": config.get("features", "basic"),
-                     "words": [], "current": [], "speak": speak_words, "keep_words": keep_words}
+        rb = None
+        if readback:  # speak each word once it's certain (readback.py), not when its space move is decoded
+            try:
+                rb = make_readback(vocab, [s for s in vocab if s not in (BLANK, WORD_BREAK)])
+            except SystemExit as e:  # the pronunciation dictionaries haven't been downloaded
+                await self.notice(str(e), "warn")
+                return
+        self.live = {"decoder": StreamingDecoder(model, vocab, keep_words=keep_words, readback=rb), "vocab": vocab,
+                     "features": config.get("features", "basic"), "words": [], "texts": [], "current": [],
+                     "speak": speak_words, "keep_words": keep_words, "readback": readback}
         self.mode = "live"
         self.guard.block()
         await self.push_state()
@@ -258,6 +265,9 @@ class App:
         lv = self.live
         dec = lv["decoder"]
         events = dec.push(x)
+        n_words = sum(kind == "word" and bool(value) for kind, value in events)
+        if dec.readback is not None and n_words:
+            lv["texts"] += dec.texts[-n_words:]  # how each read-back word is spelled ("see/sea")
         for kind, value in events:
             if kind == "sound":
                 lv["current"].append(value)
@@ -270,7 +280,7 @@ class App:
         stepped = dec.stepped
         if events or stepped:
             msg = {"type": "live", "n": self.tick, "events": events, "words": lv["words"][-40:],
-                   "current": lv["current"]}
+                   "texts": lv["texts"][-40:], "current": lv["current"]}
             if stepped:
                 msg |= {"probs": dict(zip(lv["vocab"], (round(float(p), 3) for p in dec.probs))),
                         "infer_ms": round(dec.infer_ms, 2)}
@@ -278,7 +288,7 @@ class App:
 
     async def live_clear(self):
         if self.live:
-            self.live["words"], self.live["current"] = [], []
+            self.live["words"], self.live["texts"], self.live["current"] = [], [], []
             await self.push_state()
 
     # ------------------------------------------------------------------ stopping any mode
@@ -286,7 +296,11 @@ class App:
     async def stop(self):
         self.guard.allow()
         if self.live:
-            for _, word in self.live["decoder"].flush():
+            dec = self.live["decoder"]
+            flushed = [word for _, word in dec.flush() if word]
+            if dec.readback is not None and flushed:
+                self.live["texts"] += dec.texts[-len(flushed):]
+            for word in flushed:
                 self.live["words"].append(word)
                 if self.live["speak"]:
                     speak(word)
@@ -368,7 +382,7 @@ class App:
         elif cmd == "stop":
             await self.stop()
         elif cmd == "live_start":
-            await self.live_start(bool(msg.get("speak")), bool(msg.get("keep_words")))
+            await self.live_start(bool(msg.get("speak")), bool(msg.get("keep_words")), bool(msg.get("readback")))
         elif cmd == "live_clear":
             await self.live_clear()
         elif cmd == "train_start":

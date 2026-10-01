@@ -39,7 +39,7 @@ export interface State {
   mode: Mode;
   summary: Summary;
   recording: { prompt: string[]; n: number; saved: number; session: string } | null;
-  live: { words: string[][]; current: string[]; speak: boolean; keep_words: boolean } | null;
+  live: { words: string[][]; texts: string[]; current: string[]; speak: boolean; keep_words: boolean; readback: boolean } | null;
   training: { running: boolean; epochs: number; history: EpochPoint[]; result: TrainResult | null; log: string[] };
   guard: { available: boolean; locked: boolean; error: string | null };
   arpabet: Record<string, string>;
@@ -50,6 +50,7 @@ export interface State {
 
 export interface LiveFrame {
   words: string[][];
+  texts?: string[]; // read-back: how each word is spelled ("see/sea"; unknown words end in "?")
   current: string[];
   probs?: Record<string, number>;
   infer_ms?: number;
@@ -139,7 +140,7 @@ export function useServer() {
             setState(msg as State);
             setHistory(msg.training.history);
             setLog(msg.training.log);
-            if (msg.live) setLive((prev) => ({ ...prev, words: msg.live.words, current: msg.live.current }));
+            if (msg.live) setLive((prev) => ({ ...prev, words: msg.live.words, texts: msg.live.texts, current: msg.live.current }));
             break;
           case "live":
             setLive((prev) => ({ ...prev, ...msg }));

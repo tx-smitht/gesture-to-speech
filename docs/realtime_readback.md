@@ -242,11 +242,11 @@ truly need the pause (they're prefixes of other words: "go"/"going", "i"/"ice").
 
 1. ~~**A pronunciation source for any word.**~~ Done: `pronounce.py` (CMU Pronouncing Dictionary first,
    espeak-ng for anything else; see §6). The lexicon can now grow from 358 words to a real vocabulary.
-2. **Real data.** Once your sound inventory covers English, record prompts made of real sentences
-   (`simulate.py --sentences` already performs them), and run `readback.py` on your own decoder's output.
-3. **Plug it into live decoding.** `WordBeamSearch.step()` takes the same per-step probabilities `streaming.py`
-   already computes. Show *tentative* words on screen (grey) and speak only committed ones, like streaming
-   captions do (confirmed text + hypothesis text).
+2. ~~**Real data.**~~ Started: see §7 (your recordings + real-word sentences spliced from your gestures). Next:
+   record real-word prompts directly with `collect.py --words`.
+3. ~~**Plug it into live decoding.**~~ Done: `live.py --readback` and the Live tab's read-back toggle (§7).
+   Still to do: show *tentative* words on screen (grey) and speak only committed ones, like streaming captions do
+   (confirmed text + hypothesis text).
 4. **Let the person stop early.** When a word is spoken before it's finished, the decoder should accept "moved on"
    and let the next word start (35–44% of sounds could be skipped with a personal LM). This needs a closed-loop
    simulation, where the simulated person reacts to what they hear.
@@ -279,6 +279,63 @@ python pronounce.py --add tonight blanket  # append to english/pronunciations.tx
 python pronounce.py --check                # compare english/pronunciations.txt with CMUdict
 ```
 
+## 7. With your own recordings and decoder
+
+Your language has 10 sounds (`EY IY AY OW UW S M T AA EH`), so the word list is the common English words those
+sounds can say: **70 words** (see, my, time, team, eat, stay, toast…; 57 distinct sounds once homophones merge).
+They come from the CMU dictionary plus a list of the 10,000 most common English words (`lexicon.makeable_words`),
+and the list grows automatically as you add sounds. Three changes were needed for real use:
+
+- **Unknown words.** Your calibration prompts are mostly random sound strings, and you may want names or new
+  words. `WordBeamSearch(unknown=...)` lets any sound string come out, at a penalty, so a real word wins only when
+  the signal fits it about as well. Unknown words show as their sounds with a "?" (`EY T OW?`).
+- **Prefix guard.** Without sentence context, "a" (EY) is so common that the decoder spoke it before "aim"
+  (EY M) could finish. Now a word that starts a longer word ("a"→"aim", "i"→"ice") waits until it has ended.
+- **Deadline.** If no word reaches the threshold, the best guess is spoken once the word has ended, so read-back
+  is never later than today.
+
+**Test** (`ablations/readback_real.py`): all 101 recordings, 5-fold cross-validation, each decoded by a model that
+never trained on it, through the exact live code path.
+
+| | Word error | Median delay after last sound | Before your space move |
+|---|---:|---:|---:|
+| **Your recordings as they are** (random sounds, 298 words) | | | |
+| today | 30.5% | — | — |
+| read-back, best setting | 30.5% | no sooner | — |
+| **Real-word sentences built from your recorded gestures** (721 words) | | | |
+| today | 31.9% | +0.70 s | 5% |
+| read-back (T=0.9, prior α=0.5) — the default | **25.2%** | **+0.60 s** | **36%** |
+| read-back (T=0.8) | 24.5% | +0.56 s | 42% |
+| read-back with the full word-frequency prior (α=1) | 33.6% | +0.60 s | 34% |
+
+The second half uses *your* gestures for each sound, cut out of your recordings by forced alignment, and
+re-assembled into real words. That works because trackpad gestures are separate touches, unlike speech sounds,
+which blend together.
+
+**What it shows**
+
+- **On random-sound prompts, read-back can't help, by design.** Random strings are unpredictable, and any of them
+  could continue, so nothing is certain before its space move. Read-back matches today's accuracy with the right
+  settings, and that's all it can do.
+- **With real words, it's more accurate and sooner.** 6.7 points fewer word errors, and about a third of words
+  spoken before you've finished the space move. The gain is smaller than in the simulation because there's no
+  sentence context (the test words are drawn independently), the vocabulary is tiny, and many words are short
+  prefixes of others.
+- **The prior has to match what you say.** α=0.5 matches how the test sentences were drawn. The sharper α=1
+  over-favours "to" and "a" and does worse than no read-back. In real use, a prior learned from *your* sentences
+  (the personal LM from §3) is the way to get this right.
+
+**Use it**
+
+```bash
+uv run live.py --readback            # threshold 0.9; e.g. --readback 0.8 for sooner, more errors
+uv run collect.py --words            # calibrate with real-word prompts ("SEE MY TEAM")
+uv run pronounce.py --download       # once: CMU dictionary + word-frequency list (./setup.sh does this)
+```
+
+In the web app: Live tab → "Read back real words early". Real words are shown spelled ("see/sea"), anything
+else as its sounds with "?".
+
 ## References
 
 - Card et al. (2024), *An accurate and rapidly calibrating speech neuroprosthesis*, NEJM. Phoneme RNN + n-gram LM,
@@ -302,4 +359,6 @@ uv run ablations/realtime_readback.py prepare   # simulate 3 participants, train
 uv run ablations/realtime_readback.py analyze   # experiment 1 (~25 min) + the plot
 uv run ablations/readback_variants.py           # experiment 2 (~20 min)
 uv run ablations/uniqueness_point.py            # seconds
+for i in 0 1 2 3 4; do uv run train.py --fold $i/5 --epochs 300 --out ablations/results/readback_real/fold$i.pt; done
+uv run ablations/readback_real.py               # §7: your recordings + spliced real words (~25 min)
 ```

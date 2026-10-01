@@ -5,6 +5,7 @@
     python train.py data_sim/           # simulated participant
     python train.py --epochs 100 --out models/mine.pt
     python train.py --test-session 20260929-114512   # train on the other sessions, test on this whole one
+    python train.py --fold 2/5          # cross-validation: hold out the 3rd of 5 fixed slices of the trials
 
 About 15% of trials are held out and never trained on; accuracy is only ever measured on those. Which trials are held
 out is fixed per trial, so adding new sessions never reshuffles the test set -- scores stay comparable over time.
@@ -27,6 +28,11 @@ from signals import BIN_S, FEATURE_SETS, HERE, featurize, load_trials, n_channel
 def in_test_set(trial, test_frac=0.15):
     """A fixed coin flip per trial: the same trial is always test (or always train), however much data you add."""
     return zlib.crc32(f"{trial['session']}:{trial['index']}".encode()) % 1000 < test_frac * 1000
+
+
+def in_fold(trial, fold, n_folds):
+    """Cross-validation: which of n_folds fixed slices a trial belongs to (a different hash from in_test_set)."""
+    return zlib.crc32(f"fold:{trial['session']}:{trial['index']}".encode()) % n_folds == fold
 
 
 def batches(items, size, shuffle):
@@ -95,6 +101,7 @@ def main():
     p.add_argument("--test-frac", type=float, default=0.15)
     p.add_argument("--test-session", metavar="NAME",
                    help="hold out every trial of the session whose file name contains NAME (a 'new day' test)")
+    p.add_argument("--fold", metavar="I/N", help="cross-validation: hold out slice I (0-based) of N instead")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default=os.path.join(HERE, "models", "decoder.pt"))
     args = p.parse_args()
@@ -117,6 +124,9 @@ def main():
           f"featurized in {time.time() - t0:.1f}s)")
 
     def held_out(t):
+        if args.fold:
+            i, n = map(int, args.fold.split("/"))
+            return in_fold(t, i, n)
         if args.test_session:
             return args.test_session in t["session"]
         return in_test_set(t, args.test_frac)

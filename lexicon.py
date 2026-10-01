@@ -10,6 +10,8 @@ means the decoder never has to guess a spelling.
 Pieces:
     Lexicon     every pronunciation as a path in a prefix tree ("trie"): sounds so far -> which words are still possible
     NgramLM     P(next word | previous two words), interpolated Kneser-Ney, learned by counting the corpus
+    UnigramLM   P(word) from how common it is in English, ignoring context (for when there are no example sentences)
+    makeable_words  the common English words a sound inventory can say (CMU dictionary + a word-frequency list)
 """
 
 import math
@@ -21,6 +23,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PRONUNCIATIONS = os.path.join(HERE, "english", "pronunciations.txt")
+COMMON_WORDS = os.path.join(HERE, "english", "common_words.txt")   # downloaded by pronounce.py --download
 CORPUS = os.path.join(HERE, "english", "corpus.txt")
 START, END = "<s>", "</s>"  # sentence start / end, as in every n-gram model
 
@@ -58,10 +61,11 @@ class Lexicon:
         lex.under[node]        -> 0/1 mask over words: which words are still possible from here (the "cohort")
     """
 
-    def __init__(self, pronunciations):
+    def __init__(self, pronunciations, ranks=None):
         by_sound = defaultdict(list)
-        for word, pron in sorted(pronunciations.items()):
-            by_sound[pron].append(word)
+        order = (lambda w: (ranks.get(w, 1e9), w)) if ranks else (lambda w: w)   # most common spelling first
+        for word in sorted(pronunciations, key=order):
+            by_sound[pronunciations[word]].append(word)
         self.prons = sorted(by_sound)                                 # unit id -> pronunciation
         self.names = ["/".join(by_sound[p]) for p in self.prons]      # unit id -> "to/too"
         self.unit_of = {p: i for i, p in enumerate(self.prons)}       # pronunciation -> unit id
@@ -147,3 +151,47 @@ class NgramLM:
                 logp += math.log(self.probs(s[:i])[self.index[w]])
                 n += 1
         return math.exp(-logp / n)
+
+
+SHORT_WORDS = set("a i am an as at be by do go he hi if in is it me my no of oh ok on or so to up us we ah eh ma pa "
+                  "ow ox".split())
+
+
+def makeable_words(inventory, max_rank=10000):
+    """The common English words that can be said with these sounds: {word: pronunciation}, plus {word: rank}
+    (1 = most common). A word counts if ANY of its CMU dictionary pronunciations uses only the inventory's sounds.
+    Abbreviations and letter names (cc, ceo, atm, "s") are dropped by keeping only words in the system dictionary
+    (/usr/share/dict/words) that have a vowel letter, and only real one- and two-letter words."""
+    from pronounce import cmudict_all
+    if not os.path.exists(COMMON_WORDS):
+        raise SystemExit("No english/common_words.txt -- run: python pronounce.py --download")
+    inventory = set(inventory)
+    real = set()
+    if os.path.exists("/usr/share/dict/words"):
+        real = {w for w in open("/usr/share/dict/words").read().split() if w.islower()}
+    prons, ranks = {}, {}
+    for rank, word in enumerate(_lines(COMMON_WORDS), 1):
+        if rank > max_rank or (len(word) <= 2 and word not in SHORT_WORDS) or not set(word) & set("aeiouy"):
+            continue
+        if real and word not in real and word not in ("a", "i"):
+            continue
+        fits = [p for p in cmudict_all().get(word, []) if all(s in inventory for s in p)]
+        if fits:
+            prons[word], ranks[word] = fits[0], rank
+    return prons, ranks
+
+
+class UnigramLM:
+    """P(word) proportional to 1 / rank (Zipf's law: the 10th most common word is about 10x rarer than the 1st),
+    the same whatever came before. Homophones share their probability. Same interface as NgramLM."""
+
+    def __init__(self, lexicon, ranks, pronunciations, end=0.1):
+        p = np.zeros(len(lexicon) + 1)
+        for word, rank in ranks.items():
+            p[lexicon.unit_of[pronunciations[word]]] += 1 / rank
+        p[:-1] *= (1 - end) / p[:-1].sum()
+        p[-1] = end                                    # end of sentence
+        self.p = p
+
+    def probs(self, context):
+        return self.p

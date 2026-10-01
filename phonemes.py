@@ -66,6 +66,20 @@ def make_prompt(inventory, rng=random, counts=None):
     return tokens
 
 
+def make_word_prompt(inventory, rng=random):
+    """A "sentence" of 2-4 real English words that this inventory can say, e.g. (['S', 'IY', '|', 'M', 'AY', '|'],
+    ['see', 'my']). Common words come up more often, but not overwhelmingly (weight 1 / sqrt(rank)).
+    Recording these lets the word decoder (readback.py) be tested on real words."""
+    from lexicon import makeable_words
+    prons, ranks = makeable_words(inventory)
+    if not prons:
+        raise SystemExit("None of the common English words can be said with these sounds yet.")
+    words = sorted(prons)
+    weights = [ranks[w] ** -0.5 for w in words]
+    chosen = rng.choices(words, weights, k=rng.randint(2, 4))
+    return [tok for w in chosen for tok in (*prons[w], WORD_BREAK)], chosen
+
+
 def count_sounds(prompts):
     """Examples of each sound in a list of prompts."""
     counts = {}
