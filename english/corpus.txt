@@ -1,0 +1,505 @@
+# Everyday sentences for the word-level experiments (written for this project; one sentence per line).
+# Short, conversational, the kind of thing someone communicating through a speech device says during a day.
+i am hungry
+i am thirsty
+i am tired
+i am cold
+i am hot
+i am fine thank you
+i am in pain
+i need help
+i need some water
+i need to rest
+i need to go to the bathroom
+i need my glasses
+i need my phone
+i want to sleep
+i want to go home
+i want to go outside
+i want some coffee
+i want some tea please
+i want something to eat
+i would like some water please
+i would like to sit up
+i would like to lie down
+can you help me
+can you call my wife
+can you call the nurse
+can you open the window
+can you close the door
+can you turn on the light
+can you turn off the light
+can you turn up the music
+can you turn down the music
+can you turn on the tv
+can you read to me
+can you get my book
+can you get me a blanket
+can you fix my pillow
+can you move my arm
+can you scratch my nose
+can you come here
+can you stay with me
+can you say that again
+can you speak louder please
+please come back later
+please wait a minute
+please call my family
+please help me
+please open the door
+please close the window
+please be quiet
+please talk to me
+thank you so much
+thank you for coming
+thank you for your help
+thank you very much
+thanks a lot
+you are welcome
+good morning
+good night
+good afternoon
+good evening
+how are you
+how are you doing today
+how was your day
+how was work
+how is the weather
+how are the kids
+how is your mother
+how is your dad
+how did you sleep
+how much is it
+how long will it take
+how far is it
+what time is it
+what day is it
+what is for dinner
+what is for lunch
+what is for breakfast
+what did the doctor say
+what do you think
+what are you doing
+what is that
+what is your name
+what happened
+where are you going
+where is my phone
+where is my wife
+where are the kids
+where did you go
+when are you coming back
+when is the doctor coming
+when can i go home
+when is dinner
+who is that
+who called
+who is coming today
+why are you sad
+why not
+yes please
+no thank you
+maybe later
+i do not know
+i do not like it
+i do not want that
+i do not feel well
+i feel good today
+i feel better
+i feel sick
+i feel sad
+i feel happy
+i feel much better now
+my head hurts
+my back hurts
+my leg hurts
+my arm hurts
+my stomach hurts
+my throat is dry
+my mouth is dry
+my feet are cold
+my hands are cold
+it hurts here
+it is too hot
+it is too cold
+it is too loud
+it is too bright
+it is too dark in here
+it is a nice day
+it is raining
+it is sunny today
+it is cold outside
+it is late
+it is time to go
+it is time for bed
+it is time to eat
+it was good
+it was fun
+it was a long day
+that is good
+that is great
+that is funny
+that is not right
+that is too bad
+that is fine
+that sounds good
+that sounds like fun
+i love you
+i love you too
+i miss you
+i missed you
+we love you
+see you later
+see you tomorrow
+see you soon
+talk to you later
+have a good day
+have a nice night
+have fun
+be careful
+take care
+drive safe
+i am happy to see you
+i am glad you came
+i am sorry
+i am so proud of you
+i am ready
+i am not ready yet
+i am done
+i am almost done
+i am going to sleep now
+i will be fine
+i will try
+i will call you later
+i will see you tomorrow
+i think so
+i think it is going to rain
+i think i need a doctor
+i hope so
+i hope you have a good day
+i agree with you
+i understand
+i do not understand
+i forgot
+i remember that
+let me think
+let me try again
+let us go outside
+let us eat
+let us watch a movie
+let us play a game
+let us go for a walk
+we should go home
+we should eat now
+we can talk later
+we need more milk
+we need to buy food
+we are out of bread
+the food is good
+the food is cold
+the coffee is too hot
+the tea is good
+the water is cold
+the room is too hot
+the music is too loud
+the tv is too loud
+the light is too bright
+the bed is not comfortable
+the door is open
+the window is open
+the kids are here
+the doctor is here
+the nurse is coming
+my wife is coming today
+my son is coming home
+my daughter called me
+my mother is coming to see me
+my friend is here
+my brother called
+my sister is coming
+our dog is hungry
+the dog wants to go out
+the cat is sleeping
+feed the dog please
+walk the dog please
+i want to watch the game
+who won the game
+did we win
+what is the score
+turn it up
+turn it off
+turn it on
+put it here
+put it there
+put it down
+pick it up
+give it to me
+give me that
+show me
+tell me more
+tell me a story
+tell me about your day
+read me the news
+read the letter to me
+i want to write a letter
+i want to send a message
+send her a message
+call him back
+call her back
+ask the doctor
+ask the nurse
+ask my wife
+is it time to eat
+is it cold outside
+is it raining
+is the doctor here
+is everything okay
+are you okay
+are you tired
+are you hungry
+are you coming
+are you sure
+do you want some coffee
+do you want to go
+do you have time
+do you need help
+do you know where it is
+did you eat
+did you sleep well
+did you call
+did you see that
+did you have a good day
+can we go now
+can we talk
+can we go outside today
+can i have some water
+can i have more
+can i have a drink
+can i have some ice
+can i have my medicine
+i need my medicine
+i took my medicine
+it is time for my medicine
+i need a drink
+i need a blanket
+i need a pillow
+i need more time
+i need a break
+i need to sleep
+i need to think
+i need to talk to you
+i have a question
+i have an idea
+i have to go
+i like that
+i like this song
+i like your shirt
+i like it here
+you look nice today
+you look tired
+you are funny
+you are the best
+you are right
+you are kind
+you did a good job
+good job
+well done
+nice work
+that was fast
+that was close
+not now
+not yet
+not today
+one more time
+one minute please
+just a minute
+just a little
+a little more
+a little less
+too much
+not enough
+all done
+all good
+come in
+come here please
+go away please
+leave me alone please
+stop please
+wait for me
+hurry up
+slow down
+be quiet please
+listen to me
+look at this
+look at that
+look over there
+over here
+right here
+right now
+right there
+up please
+down please
+more please
+no more
+again please
+help please
+open it
+close it
+move it
+fix it
+wash my face please
+brush my hair please
+brush my teeth please
+i want to take a bath
+i want to change my clothes
+i want to wear my shirt
+can you put on my shoes
+can you take off my shoes
+my shoes are too tight
+the pillow is too high
+lift my head please
+lower my bed please
+raise my bed please
+roll me over please
+i am uncomfortable
+i want to get up
+i want to go back to bed
+i want to sit in my chair
+let me sleep
+wake me up later
+wake me up at noon
+i slept well
+i did not sleep well
+i had a bad dream
+i had a good dream
+what did you do today
+what are we doing tomorrow
+what do you want to eat
+what do you want to do
+what time are they coming
+when are they coming
+who is on the phone
+is that my phone
+answer the phone please
+put it on speaker
+i can not hear you
+i can hear you now
+i can not see
+i can see it
+speak up please
+say it again please
+i said no
+i said yes
+i mean it
+i am not sure
+i am sure
+of course
+no problem
+sounds good
+okay
+all right
+sure
+yes
+no
+hello
+goodbye
+bye
+hi
+please
+thank you
+sorry
+excuse me
+i am sorry i am late
+it is not your fault
+do not worry
+do not worry about it
+it is okay
+everything is fine
+everything will be okay
+i am doing well
+i am doing better today
+i had a good day
+i had a hard day
+it was a good day
+today was fun
+tomorrow is a big day
+happy birthday
+merry christmas
+happy new year
+congratulations
+good luck
+i am proud of you
+i love this
+i love that song
+play some music please
+play my song
+play the radio
+turn the page please
+next page please
+go back please
+i want to read
+i want to go to church
+i want to see my friends
+i want to call my mother
+i want to talk to my wife
+i want to see the kids
+bring the kids over
+how old is she
+how old is he
+she is so big now
+he is so tall now
+they grow up so fast
+we had a good time
+we should do this again
+let us do it again
+that was a great movie
+i want to watch a movie tonight
+what is on tv
+change the channel please
+find the remote please
+where is the remote
+it is over there
+it is on the table
+it is in my bag
+it is under the bed
+it is next to the door
+put it on the table
+put it in my bag
+i lost my glasses
+i found it
+here it is
+there it is
+this is mine
+that is yours
+is this yours
+whose is this
+it is cold in here
+it is warm in here
+i am too hot
+i am too cold
+open the window a little
+close the window please
+turn on the fan please
+turn off the fan please
+it smells good
+it tastes good
+it tastes bad
+i do not like the taste
+i want something sweet
+i want some ice cream
+i want a sandwich
+i want some soup
+i want some fruit
+i want some juice
+i want some milk
+can i have some more soup
+no more food please
+i am full
+that was good food
+thank you for dinner
+dinner was great
+lunch was good
+breakfast is ready
+dinner is ready
+come and eat
+let us eat together

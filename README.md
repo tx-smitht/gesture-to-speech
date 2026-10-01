@@ -120,6 +120,16 @@ language and writes 300 trials to `data_sim/`. Then run `python train.py data_si
 | `live.py` | streaming decoding, speech output | real-time use + text-to-speech |
 | `simulate.py` | fake participant for testing the pipeline | simulated users |
 
+## Experimental: real-time read-back (speak each word as it's decoded)
+
+Speech BCIs usually wait for the whole sentence, then rescore it with a language model before speaking.
+`readback.py` instead speaks each word the moment it's confident enough. It turns the sound probabilities into words
+using a pronunciation tree (`lexicon.py`, `english/`) and a trigram language model conditioned on the words already
+spoken. On simulated participants it matched the accuracy of waiting for the sentence, while speaking each word
+~0.1-0.2 s after its last sound instead of ~4 s later. With a personal language model, most words come out before
+they're finished. Write-up, results and next steps: [docs/realtime_readback.md](docs/realtime_readback.md).
+Experiments: `ablations/realtime_readback.py`, `ablations/readback_variants.py`, `ablations/uniqueness_point.py`.
+
 ## v1: Dictionary of gestures → symbols (template matching)
 
 A **gesture** is everything from the first finger landing until every finger has lifted. Fingers down at the same time
