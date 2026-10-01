@@ -17,11 +17,11 @@ I've been interested in Brain Computer Interfaces (BCIs) lately, and I wanted to
 ---
 
 
-### Quick start (macOS, Apple Silicon or Intel; needs Python 3.10+, Node, and the Xcode command-line tools):
+### Quick start (macOS, Apple Silicon or Intel; needs [uv](https://docs.astral.sh/uv/), Node, and the Xcode command-line tools; uv fetches Python 3.10 itself):
 
 ```bash
 ./setup.sh                      # Python env, the Swift trackpad lock, the web UI
-.venv/bin/python server.py      # record, train and decode at http://localhost:8765
+uv run server.py                 # record, train and decode at http://localhost:8765
 ```
 
 **Not in this repo:** recordings (`data/`, `recordings/`), taught gestures (`dictionary.json`), trained models
@@ -34,7 +34,7 @@ which is gitignored too.
 
 ```bash
 ./setup.sh                      # once: Python packages, the Swift trackpad lock, the TypeScript UI
-.venv/bin/python server.py      # opens http://localhost:8765
+uv run server.py                 # opens http://localhost:8765
 ```
 
 | Tab | What it does |
@@ -57,10 +57,10 @@ closed, and the lock also releases itself if the server stops responding.
 **Stack:** TypeScript + React (`ui/`) for the frontend; Python
 (`server.py`, FastAPI + WebSocket) for the backend, reusing the decoder; Swift for the OS integration.
 
-**Demo without a trackpad:** `.venv/bin/python server.py --replay data/<session>.jsonl` replays a recorded session
+**Demo without a trackpad:** `uv run server.py --replay data/<session>.jsonl` replays a recorded session
 through the whole pipeline in real time. Replays never lock the trackpad; `--no-lock` turns the lock off for live use too.
 
-**UI development:** run `python server.py --no-browser`, then `cd ui && npm run dev` for hot reload.
+**UI development:** run `uv run server.py --no-browser`, then `cd ui && npm run dev` for hot reload.
 
 ## v2: Neural decoder trained on sentences (the BCI approach)
 
@@ -68,7 +68,8 @@ Modelled on the published BrainGate speech decoders ([Card et al., NEJM 2024](ht
 [code](https://github.com/Neuroprosthetics-Lab/nejm-brain-to-text)). You never label individual moves: you "say"
 whole prompted sentences, and the network works out which part of the signal is which sound.
 
-Everything here runs in the project's own Python environment. Activate it once per terminal:
+Everything here runs in the project's own Python environment (`.venv`, managed by uv). Activate it once per terminal
+so plain `python` uses it, or prefix each command with `uv run`:
 
 ```bash
 source .venv/bin/activate

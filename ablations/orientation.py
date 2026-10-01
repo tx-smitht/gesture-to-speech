@@ -55,8 +55,8 @@ CAVEATS
       than it would if every sentence had it. Re-run once most of your data has angle.
 
 HOW TO RUN (from the project folder)
-    .venv/bin/python ablations/orientation.py run        # ~15-30 min; trains 6 models, 1 CPU core each
-    .venv/bin/python ablations/orientation.py analyze    # prints the tables
+    uv run ablations/orientation.py run        # ~15-30 min; trains 6 models, 1 CPU core each
+    uv run ablations/orientation.py analyze    # prints the tables
 
 RESULTS
     (pending -- needs recordings with finger angles first)

@@ -24,7 +24,7 @@ HOW TO READ THE RESULT
     Real decoding errors only push words later, so this is the best case.
 
 HOW TO RUN
-    .venv/bin/python ablations/uniqueness_point.py      # a few seconds
+    uv run ablations/uniqueness_point.py      # a few seconds
 
 RESULTS
     2026-10-01 -- 95 test sentences, 368 words:

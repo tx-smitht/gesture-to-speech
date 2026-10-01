@@ -1,0 +1,17 @@
+[project]
+name = "trackpad-bci"
+version = "0.1.0"
+description = "Decode a gesture language from trackpad touches, the way a BCI decodes neural signals"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.14",
+    "numpy>=2.2",
+    "matplotlib>=3.10",
+    "fastapi>=0.142",
+    "uvicorn>=0.54",
+    "websockets>=16.1",
+]
+
+[tool.uv]
+package = false

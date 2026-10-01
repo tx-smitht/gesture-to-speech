@@ -42,8 +42,8 @@ CAVEATS
     - "personal" LM has seen the exact test sentences: it measures the best case for repeated phrases.
 
 HOW TO RUN
-    .venv/bin/python ablations/realtime_readback.py prepare     # once (trains the phoneme decoders)
-    .venv/bin/python ablations/readback_variants.py             # ~10 min
+    uv run ablations/realtime_readback.py prepare     # once (trains the phoneme decoders)
+    uv run ablations/readback_variants.py             # ~10 min
 
 RESULTS
     2026-10-01 -- participant j11 (14.3% phoneme error), 1104 test words. Spoken WER @ median delay after the word's

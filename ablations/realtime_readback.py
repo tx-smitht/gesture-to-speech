@@ -76,8 +76,8 @@ CAVEATS
     - "sentence end" uses the same trigram LM, not an LLM, so its accuracy advantage here is a lower bound.
 
 HOW TO RUN (from the project folder)
-    .venv/bin/python ablations/realtime_readback.py prepare   # simulate + train 3 decoders (~25 min, 3 cores each)
-    .venv/bin/python ablations/realtime_readback.py analyze   # decode with every policy (~25 min), print tables, plot
+    uv run ablations/realtime_readback.py prepare   # simulate + train 3 decoders (~25 min, 3 cores each)
+    uv run ablations/realtime_readback.py analyze   # decode with every policy (~25 min), print tables, plot
 
 RESULTS
     2026-10-01 -- 95 test sentences x 3 performances = 1104 words; 60-epoch decoders; beam 48. Full write-up with the

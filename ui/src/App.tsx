@@ -75,7 +75,7 @@ export default function App() {
       {state && (state.stale_code?.length ?? 0) > 0 && (
         <div className="banner banner-strong">
           The app's code has changed since the server started ({state.stale_code.join(", ")}). Restart it to use the
-          changes: press <kbd>Ctrl</kbd>+<kbd>C</kbd> in its terminal, then run <code>.venv/bin/python server.py</code> again.
+          changes: press <kbd>Ctrl</kbd>+<kbd>C</kbd> in its terminal, then run <code>uv run server.py</code> again.
         </div>
       )}
 

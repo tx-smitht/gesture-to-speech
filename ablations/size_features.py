@@ -46,8 +46,8 @@ CAVEATS
       signals.py; it needs its own ablation once there are enough new recordings).
 
 HOW TO RUN (from the project folder)
-    .venv/bin/python ablations/size_features.py run        # ~15-25 min; trains 6 models, 1 CPU core each
-    .venv/bin/python ablations/size_features.py analyze    # prints the tables
+    uv run ablations/size_features.py run        # ~15-25 min; trains 6 models, 1 CPU core each
+    uv run ablations/size_features.py analyze    # prints the tables
 
 RESULTS
     2026-10-01 -- 81 sentences (6 sessions, recorded 2026-09-28 to 2026-10-01); test set 10 sentences / 64 symbols;

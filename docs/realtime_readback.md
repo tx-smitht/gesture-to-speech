@@ -298,8 +298,8 @@ python pronounce.py --check                # compare english/pronunciations.txt 
 ## Reproduce
 
 ```bash
-.venv/bin/python ablations/realtime_readback.py prepare   # simulate 3 participants, train their decoders (~25 min)
-.venv/bin/python ablations/realtime_readback.py analyze   # experiment 1 (~25 min) + the plot
-.venv/bin/python ablations/readback_variants.py           # experiment 2 (~20 min)
-.venv/bin/python ablations/uniqueness_point.py            # seconds
+uv run ablations/realtime_readback.py prepare   # simulate 3 participants, train their decoders (~25 min)
+uv run ablations/realtime_readback.py analyze   # experiment 1 (~25 min) + the plot
+uv run ablations/readback_variants.py           # experiment 2 (~20 min)
+uv run ablations/uniqueness_point.py            # seconds
 ```
