@@ -1,0 +1,33 @@
+# --- Secrets: API keys and other credentials live in .env, never in the repo ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Personal data: your recordings, taught gestures, models trained on them, and your sound list ---
+data/
+recordings/
+models/
+dictionary.json
+language.json
+
+# --- Generated: simulated data (python simulate.py recreates it) ---
+data_sim/
+
+# --- Installed / built by ./setup.sh ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+bin/
+ui/node_modules/
+ui/dist/
+
+# --- OS, editor and tool clutter ---
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.log
+.claude/settings.local.json
