@@ -1,18 +1,67 @@
 #!/bin/bash
 # One-time setup for the web app: Python packages, the trackpad lock (Swift) and the UI (TypeScript).
+# Each step shows its latest 10 lines of output, indented, while it runs.
 set -e
 cd "$(dirname "$0")"
 
-echo "1/3  Python packages (.venv)"
-[ -d .venv ] || python3 -m venv .venv
-.venv/bin/python -m pip install --no-cache-dir -q -r requirements.txt
+WINDOW=10      # lines of live output shown per step
+INDENT="    "
 
-echo "2/3  Trackpad lock (Swift)"
-mkdir -p bin
-swiftc -O guard/TrackpadGuard.swift -o bin/trackpad-guard
+# step "title" command...  Run a command, showing a rolling window of its output under the title.
+# The window collapses when the step succeeds; on failure it stays, and the full log is kept.
+step() {
+  local title=$1; shift
+  echo "$title"
+  local log; log=$(mktemp -t setup)
+  local start=$SECONDS status
 
-echo "3/3  Web UI (TypeScript)"
-(cd ui && npm install --no-fund --no-audit --silent && npm run build --silent)
+  if [ ! -t 1 ]; then                      # not a terminal (CI, piped): plain indented output
+    set +e; "$@" 2>&1 | tee "$log" | sed "s/^/$INDENT/"; status=${PIPESTATUS[0]}; set -e
+  else
+    local cols; cols=$(tput cols 2>/dev/null) || cols=80
+    local width=$(( cols - ${#INDENT} - 1 )) shown=0 pid
+    draw() {
+      local lines n=0
+      # \r-style progress bars become separate lines; long lines are cut so each takes one row
+      lines=$(tr '\r' '\n' < "$log" | grep -v '^[[:space:]]*$' | tail -n "$WINDOW" | cut -c1-"$width")
+      [ "$shown" -gt 0 ] && printf '\033[%dA' "$shown"
+      if [ -n "$lines" ]; then
+        while IFS= read -r l; do printf '\033[K\033[2m%s%s\033[0m\n' "$INDENT" "$l"; n=$((n + 1)); done <<< "$lines"
+      fi
+      shown=$n
+    }
+    "$@" > "$log" 2>&1 & pid=$!
+    trap 'kill $pid 2>/dev/null; echo; exit 130' INT TERM
+    while kill -0 "$pid" 2>/dev/null; do draw; sleep 0.1; done
+    set +e; wait "$pid"; status=$?; set -e
+    trap - INT TERM
+    if [ "$status" -eq 0 ]; then
+      [ "$shown" -gt 0 ] && printf '\033[%dA\033[J' "$shown"      # collapse the window
+    else
+      draw
+    fi
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    echo "${INDENT}Failed (exit $status). Full output: $log"
+    exit "$status"
+  fi
+  echo "${INDENT}done ($((SECONDS - start))s)"
+  rm -f "$log"
+}
+
+if ! command -v uv > /dev/null; then
+  echo "uv is not installed. Install it, then re-run ./setup.sh:"
+  echo "  curl -LsSf https://astral.sh/uv/install.sh | sh     (or: brew install uv)"
+  exit 1
+fi
+
+build_ui() { cd ui && npm install --no-fund --no-audit && npm run build; }
+
+# --no-cache: torch is large and the wheel isn't worth keeping in uv's cache after install
+step "1/3  Python packages (uv, .venv)" uv sync --no-cache
+step "2/3  Trackpad lock (Swift)"       bash -c 'mkdir -p bin && swiftc -O guard/TrackpadGuard.swift -o bin/trackpad-guard'
+step "3/3  Web UI (TypeScript)"         build_ui
 
 echo
-echo "Done. Start the app with:  .venv/bin/python server.py"
+echo "Done. Start the app with:  uv run server.py"
