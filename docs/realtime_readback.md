@@ -64,6 +64,7 @@ LLM or not.
 |---|---|
 | `english/pronunciations.txt` | 358 everyday words → ARPAbet (hand-written, CMU Pronouncing Dictionary style; 350 distinct sounds after merging homophones) |
 | `english/corpus.txt` | 503 everyday sentences ("can you call the nurse", "i need my medicine"), split per sentence into LM / tuning / test |
+| `pronounce.py` | any word → ARPAbet: CMU Pronouncing Dictionary, then espeak-ng (replaces the broken macOS converter, §6) |
 | `lexicon.py` | the pronunciation tree, and a trigram language model with Kneser-Ney smoothing |
 | `readback.py` | `WordBeamSearch`: streaming word decoder with irreversible commits; optional *continuous* mode (no pause between words) |
 | `simulate.py` | can now perform real sentences (`--sentences`), with adjustable sloppiness (`--jitter`); it records when every sound started and ended |
@@ -239,9 +240,8 @@ truly need the pause (they're prefixes of other words: "go"/"going", "i"/"ice").
 
 ## 5. Next steps (ideas, roughly in order)
 
-1. **A pronunciation source for any word.** macOS's built-in text→phoneme converter is gone on this macOS version (see
-   §6). Options: the CMU Pronouncing Dictionary (~3.6 MB) or `espeak-ng` (Homebrew). Either would let the lexicon
-   grow from 358 words to a real vocabulary.
+1. ~~**A pronunciation source for any word.**~~ Done: `pronounce.py` (CMU Pronouncing Dictionary first,
+   espeak-ng for anything else; see §6). The lexicon can now grow from 358 words to a real vocabulary.
 2. **Real data.** Once your sound inventory covers English, record prompts made of real sentences
    (`simulate.py --sentences` already performs them), and run `readback.py` on your own decoder's output.
 3. **Plug it into live decoding.** `WordBeamSearch.step()` takes the same per-step probabilities `streaming.py`
@@ -256,12 +256,28 @@ truly need the pause (they're prefixes of other words: "go"/"going", "i"/"ice").
 6. **A policy with information the beam lacks.** For example, the person's typing speed or per-sound error rates
    from recent use, or a "regret" signal (how often committed words get corrected), to tune the threshold per user.
 
-## 6. The macOS pronunciation tool
+## 6. The macOS pronunciation tool, and its replacement
 
 `NSSpeechSynthesizer.phonemes(from:)` and the C function `CopyPhonemesFromText` both fail with error −50
 (`paramErr`) on this macOS for **every one of the 184 installed voices**, including the classic MacinTalk voices
 (Fred, Albert) that used to support it. `AVSpeechSynthesizer`'s phoneme markers come back empty too. Speech output
 (`say`, `[[inpt PHON]]`) still works. Only the text→phonemes direction is gone, so it can't be fixed from our side.
+
+**Replacement: `pronounce.py`**, which tries two sources in order:
+
+1. **The CMU Pronouncing Dictionary** (`english/cmudict.dict`, 135k words, downloaded by `./setup.sh` or
+   `python pronounce.py --download`): hand-checked, and the same ARPAbet the BCI decoders use. 355 of the 358
+   hand-written pronunciations match it exactly. The other 3 are words spelled the same but said two ways
+   (close/close, excuse/excuse, read/read), where the hand-written one fits the corpus.
+2. **espeak-ng** (`brew install espeak-ng`): pronounces *any* spelling by rule. Its IPA output is converted to
+   ARPAbet. Against CMUdict it's identical on **93% of the everyday words** (2% of sounds differ), but only 59% on
+   random dictionary entries (mostly names: "McMahon", "Zarzycki"). That's why it's the fallback.
+
+```bash
+python pronounce.py water tonight          # look up
+python pronounce.py --add tonight blanket  # append to english/pronunciations.txt
+python pronounce.py --check                # compare english/pronunciations.txt with CMUdict
+```
 
 ## References
 

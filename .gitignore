@@ -18,6 +18,9 @@ ablations/results/
 # --- Generated: simulated data (python simulate.py recreates it) ---
 data_sim/
 
+# --- Downloaded: the CMU Pronouncing Dictionary (python pronounce.py --download, or ./setup.sh) ---
+english/cmudict.dict
+
 # --- Installed / built by ./setup.sh ---
 .venv/
 venv/
