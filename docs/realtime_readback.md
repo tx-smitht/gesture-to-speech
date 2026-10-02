@@ -282,7 +282,9 @@ python pronounce.py --check                # compare english/pronunciations.txt 
 ## 7. With your own recordings and decoder
 
 Your language has 10 sounds (`EY IY AY OW UW S M T AA EH`), so the word list is the common English words those
-sounds can say: **70 words** (see, my, time, team, eat, stay, toast…; 57 distinct sounds once homophones merge).
+sounds can say: **69 words** (see, my, time, team, eat, stay, toast…; 56 distinct gesture sequences once
+homophones merge). The Sounds tab lists them. (The experiment below ran with 70: it also had "am" read as "a.m."
+(EY EH M), which is now skipped because letter-by-letter readings aren't how the word is said.)
 They come from the CMU dictionary plus a list of the 10,000 most common English words (`lexicon.makeable_words`),
 and the list grows automatically as you add sounds. Three changes were needed for real use:
 
@@ -330,6 +332,7 @@ which blend together.
 ```bash
 uv run live.py --readback            # threshold 0.9; e.g. --readback 0.8 for sooner, more errors
 uv run collect.py --words            # calibrate with real-word prompts ("SEE MY TEAM")
+                                     # (web app: Record tab -> "Real words" or "Mix")
 uv run pronounce.py --download       # once: CMU dictionary + word-frequency list (./setup.sh does this)
 ```
 

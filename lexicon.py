@@ -175,7 +175,11 @@ def makeable_words(inventory, max_rank=10000):
             continue
         if real and word not in real and word not in ("a", "i"):
             continue
-        fits = [p for p in cmudict_all().get(word, []) if all(s in inventory for s in p)]
+        options = cmudict_all().get(word, [])
+        # A secondary pronunciation longer than the main one is usually letters spelled out ("am" as "a.m."):
+        # skip those. Same-length or shorter ones are real variants ("a" as "ay", "empty" as "emty").
+        options = options[:1] + [p for p in options[1:] if len(p) <= len(options[0])]
+        fits = [p for p in options if all(s in inventory for s in p)]
         if fits:
             prons[word], ranks[word] = fits[0], rank
     return prons, ranks

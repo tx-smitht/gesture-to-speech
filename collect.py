@@ -60,7 +60,7 @@ def main():
 
     def next_prompt():
         if args.words:
-            tokens, w = make_word_prompt(inventory)
+            tokens, w = make_word_prompt(inventory, counts=count_sounds(earlier + saved_prompts))
             words[tuple(tokens)] = w
             return tokens
         # Favour sounds with the fewest examples, counting this session's saved trials too

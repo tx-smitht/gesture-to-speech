@@ -133,7 +133,8 @@ Experiments: `ablations/realtime_readback.py`, `ablations/readback_variants.py`,
 
 **On your own decoder:** `python live.py --readback` (or the Live tab's "Read back real words early") speaks the
 common English words your sounds can say as soon as they're certain; anything else comes out as its sounds.
-`python collect.py --words` records prompts made of those words. On real-word sentences built from the recorded
+To record real words, choose "Real words" or "Mix" on the Record tab (or `python collect.py --words`); the Sounds
+tab lists the words your sounds can say. On real-word sentences built from the recorded
 gestures it cut word errors from 32% to 25% and spoke a third of words before their space move (§7 of the write-up).
 
 **Pronunciations for any word:** `python pronounce.py water tonight` looks words up in the CMU Pronouncing Dictionary

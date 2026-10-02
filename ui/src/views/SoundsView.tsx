@@ -5,7 +5,7 @@ import type { State, Send } from "../server";
 const VOWELS = ["AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY", "OW", "OY", "UH", "UW"];
 
 export function SoundsView({ state, send }: { state: State; send: Send }) {
-  const { inventory, counts, model } = state.summary;
+  const { inventory, counts, model, words } = state.summary;
   const [draft, setDraft] = useState<string[]>(inventory);
   useEffect(() => setDraft(inventory), [inventory]);
 
@@ -47,6 +47,27 @@ export function SoundsView({ state, send }: { state: State; send: Send }) {
         <button className="btn btn-primary" disabled={!changed || draft.length === 0}
           onClick={() => send("inventory_set", { phonemes: draft })}>Save sounds</button>
         {changed && <button className="btn" onClick={() => setDraft(inventory)}>Discard changes</button>}
+      </div>
+      <div className="sound-group">
+        <span className="label">Words you can say</span>
+        {words === null ? (
+          <p className="caption">Run <code>uv run pronounce.py --download</code> to see which English words your sounds can make.</p>
+        ) : (
+          <>
+            <p className="caption">
+              {words.length} common English words use only your saved sounds, most common first (words that sound
+              the same share a chip; hover to see them). Word read-back (Live tab) and real-word prompts (Record
+              tab) use these; add sounds to unlock more.
+            </p>
+            <div className="word-list">
+              {words.map((w) => (
+                <span key={w.word} className="word-chip" title={w.also.length ? `also: ${w.also.join(", ")}` : undefined}>
+                  {w.word}<span className="word-chip-sounds">{w.sounds.join(" ")}</span>
+                </span>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );

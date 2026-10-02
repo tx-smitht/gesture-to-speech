@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 
 from live import speak
 from model import BLANK, load_model
-from phonemes import ARPABET, LANGUAGE_PATH, WORD_BREAK, count_sounds, load_inventory, make_prompt
+from phonemes import ARPABET, LANGUAGE_PATH, WORD_BREAK, count_sounds, load_inventory, make_prompt, make_word_prompt
 from signals import BIN_S, CONTACT_STATES, DATA_DIR, FEATURE_SETS, HERE, RawTouches, bin_vector, load_trials, \
     remove_last_trial, save_trial
 from streaming import StreamingDecoder, make_readback
@@ -108,13 +108,22 @@ class App:
                          n_train=c.get("n_train"), n_test=c.get("n_test"),
                          trained_at=datetime.fromtimestamp(os.path.getmtime(self.model_path)).isoformat(),
                          missing=[s for s in inventory if s not in vocab])
-        return {"inventory": inventory, "counts": counts, "total_trials": len(trials),
+        try:  # the common English words these sounds can say (needs pronounce.py --download)
+            from lexicon import makeable_words
+            prons, ranks = makeable_words(inventory)
+            by_sound = {}  # one entry per gesture sequence: homophones ("see", "sea") are the same gestures
+            for w in sorted(prons, key=ranks.get):
+                by_sound.setdefault(prons[w], []).append(w)
+            words = [{"word": ws[0], "also": ws[1:], "sounds": list(p)} for p, ws in by_sound.items()]
+        except SystemExit:
+            words = None
+        return {"inventory": inventory, "counts": counts, "total_trials": len(trials), "words": words,
                 "sessions": [{"name": k, "trials": v} for k, v in sorted(sessions.items())], "model": model}
 
     def state(self):
         rec = None
         if self.rec:
-            rec = {k: self.rec[k] for k in ("prompt", "n", "session")} | {"saved": len(self.rec["saved"])}
+            rec = {k: self.rec[k] for k in ("prompt", "words", "kind", "n", "session")} | {"saved": len(self.rec["saved"])}
         live = None
         if self.live:
             live = {k: self.live[k] for k in ("words", "texts", "current", "speak", "keep_words", "readback")}
@@ -171,22 +180,32 @@ class App:
 
     # ------------------------------------------------------------------ recording (the Copy Task)
 
-    async def record_start(self, n):
+    async def record_start(self, n, kind="sounds"):
+        """kind: "sounds" (random sound sentences), "words" (real English words your sounds can say) or "mix"."""
         if self.mode != "idle":
             return
+        if kind != "sounds" and not self.summary.get("words"):
+            await self.notice("No real words available yet (run: uv run pronounce.py --download) -- using sounds",
+                              "warn")
+            kind = "sounds"
         self.rec = {"session": f"session_{datetime.now():%Y%m%d-%H%M%S}", "n": max(1, int(n)), "saved": [],
-                    "inventory": load_inventory(), "frames": [], "t_start": time.monotonic()}
-        self.rec["prompt"] = self._next_prompt()
+                    "saved_words": [], "kind": kind, "inventory": load_inventory(), "frames": [],
+                    "t_start": time.monotonic()}
+        self.rec["prompt"], self.rec["words"] = self._next_prompt()
         self.mode = "recording"
         self.guard.block()
         await self.push_state()
 
     def _next_prompt(self):
-        """Favour sounds with the fewest examples, counting this session's saved trials too."""
+        """(sound tokens, English words or None). Favours sounds with the fewest examples, counting this session's
+        saved trials too. "mix" alternates: real words, then random sounds."""
         counts = dict(self.summary["counts"])
         for tok, n in count_sounds(self.rec["saved"]).items():
             counts[tok] = counts.get(tok, 0) + n
-        return make_prompt(self.rec["inventory"], counts=counts)
+        kind = self.rec["kind"]
+        if kind == "words" or (kind == "mix" and len(self.rec["saved"]) % 2 == 0):
+            return make_word_prompt(self.rec["inventory"], counts=counts)
+        return make_prompt(self.rec["inventory"], counts=counts), None
 
     def _restart_trial(self):
         self.rec["frames"], self.rec["t_start"] = [], time.monotonic()
@@ -202,13 +221,15 @@ class App:
             await self.notice("No touches recorded -- try again", "warn")
             return
         path = os.path.join(self.data_dir, rec["session"] + ".jsonl")
-        save_trial(path, rec["prompt"], frames, t_end - rec["t_start"], self.rt.pad)
+        save_trial(path, rec["prompt"], frames, t_end - rec["t_start"], self.rt.pad,
+                   **({"words": rec["words"]} if rec["words"] else {}))
         rec["saved"].append(rec["prompt"])
+        rec["saved_words"].append(rec["words"])
         if len(rec["saved"]) >= rec["n"]:
             await self.stop()
             await self.notice(f"Session complete: {rec['n']} sentences saved")
             return
-        rec["prompt"] = self._next_prompt()
+        rec["prompt"], rec["words"] = self._next_prompt()
         self._restart_trial()
         await self.push_state()
 
@@ -225,7 +246,7 @@ class App:
             await self.notice("Nothing saved yet to undo", "warn")
             return
         remove_last_trial(os.path.join(self.data_dir, rec["session"] + ".jsonl"))
-        rec["prompt"] = rec["saved"].pop()
+        rec["prompt"], rec["words"] = rec["saved"].pop(), rec["saved_words"].pop()
         self._restart_trial()
         await self.notice(f"Removed sentence {len(rec['saved']) + 1} -- do it again")
         await self.push_state()
@@ -372,7 +393,7 @@ class App:
     async def handle(self, msg):
         cmd = msg.get("cmd")
         if cmd == "record_start":
-            await self.record_start(msg.get("n", 20))
+            await self.record_start(msg.get("n", 20), msg.get("kind", "sounds"))
         elif cmd == "accept":
             await self.record_accept()
         elif cmd == "redo":

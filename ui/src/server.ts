@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Mode = "idle" | "recording" | "live";
+export type PromptKind = "sounds" | "words" | "mix";
 
 export interface ModelInfo {
   exists: boolean;
@@ -19,6 +20,8 @@ export interface Summary {
   inventory: string[];
   counts: Record<string, number>;
   total_trials: number;
+  // common English words your sounds can say, one per gesture sequence (null: dictionary not downloaded)
+  words: { word: string; also: string[]; sounds: string[] }[] | null;
   sessions: { name: string; trials: number }[];
   model: ModelInfo;
 }
@@ -38,7 +41,7 @@ export interface TrainResult {
 export interface State {
   mode: Mode;
   summary: Summary;
-  recording: { prompt: string[]; n: number; saved: number; session: string } | null;
+  recording: { prompt: string[]; words: string[] | null; kind: PromptKind; n: number; saved: number; session: string } | null;
   live: { words: string[][]; texts: string[]; current: string[]; speak: boolean; keep_words: boolean; readback: boolean } | null;
   training: { running: boolean; epochs: number; history: EpochPoint[]; result: TrainResult | null; log: string[] };
   guard: { available: boolean; locked: boolean; error: string | null };

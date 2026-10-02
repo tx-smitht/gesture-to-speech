@@ -66,16 +66,29 @@ def make_prompt(inventory, rng=random, counts=None):
     return tokens
 
 
-def make_word_prompt(inventory, rng=random):
+def make_word_prompt(inventory, rng=random, counts=None):
     """A "sentence" of 2-4 real English words that this inventory can say, e.g. (['S', 'IY', '|', 'M', 'AY', '|'],
-    ['see', 'my']). Common words come up more often, but not overwhelmingly (weight 1 / sqrt(rank)).
-    Recording these lets the word decoder (readback.py) be tested on real words."""
+    ['see', 'my']). Recording these lets the word decoder (readback.py) learn from and be tested on real words.
+
+    Common words come up more often, but gently (weight rank ** -0.3): "to" and "a" would otherwise fill half the
+    prompts. Homophones are one entry, spelled the most common way ("sea" and "see" are the same gestures).
+    counts: examples recorded so far per sound. When given, words made of the sounds with the fewest examples are
+    favoured too: weight x (the word's average balance weight / the inventory's) ** 3. English words lean heavily
+    on T, M and S, so a gentle boost would barely move the rare sounds."""
     from lexicon import makeable_words
     prons, ranks = makeable_words(inventory)
     if not prons:
         raise SystemExit("None of the common English words can be said with these sounds yet.")
-    words = sorted(prons)
-    weights = [ranks[w] ** -0.5 for w in words]
+    by_sound = {}
+    for w in sorted(prons, key=ranks.get):
+        by_sound.setdefault(prons[w], w)
+    words = list(by_sound.values())
+    weights = [ranks[w] ** -0.3 for w in words]
+    if counts is not None:
+        balance = {s: 1 / (counts.get(s, 0) + BALANCE_SMOOTHING) for s in inventory}
+        mean = sum(balance.values()) / len(balance)
+        weights = [wt * (sum(balance[s] for s in prons[w]) / len(prons[w]) / mean) ** 3
+                   for wt, w in zip(weights, words)]
     chosen = rng.choices(words, weights, k=rng.randint(2, 4))
     return [tok for w in chosen for tok in (*prons[w], WORD_BREAK)], chosen
 
