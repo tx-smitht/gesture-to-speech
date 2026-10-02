@@ -61,7 +61,8 @@ build_ui() { cd ui && npm install --no-fund --no-audit && npm run build; }
 
 # --no-cache: torch is large and the wheel isn't worth keeping in uv's cache after install
 step "1/4  Python packages (uv, .venv)" uv sync --no-cache
-step "2/4  Trackpad lock (Swift)"       bash -c 'mkdir -p bin && swiftc -O guard/TrackpadGuard.swift -o bin/trackpad-guard'
+step "2/4  Trackpad lock + speech helper (Swift)" \
+  bash -c 'mkdir -p bin && swiftc -O guard/TrackpadGuard.swift -o bin/trackpad-guard && swiftc -O guard/Speaker.swift -o bin/speaker'
 step "3/4  Web UI (TypeScript)"         build_ui
 step "4/4  Pronunciation dictionary + word-frequency list (english/, ~3.7 MB)" \
   bash -c '[ -f english/cmudict.dict ] && [ -f english/common_words.txt ] && echo "already downloaded" || uv run pronounce.py --download'

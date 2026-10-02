@@ -5,8 +5,10 @@
 
 macOS `say` used to take phonemes directly ("[[inpt PHON]]mAY"), but current macOS no longer understands that
 command and reads the brackets out loud instead. So:
-  1. If the sounds are an English word (CMU dictionary; the most common spelling), `say` speaks the word with
-     your normal Mac voice. Words that sound the same are the same sounds, so any spelling is right.
+  1. If the sounds are an English word (CMU dictionary; the most common spelling), the Mac voice speaks the word.
+     Words that sound the same are the same sounds, so any spelling is right. It's spoken by bin/speaker
+     (guard/Speaker.swift), which keeps the voice loaded: a word starts within a few milliseconds, where starting
+     `say` for each word took over a second. Without bin/speaker, `say` is used.
   2. Otherwise espeak-ng (`brew install espeak-ng`) speaks the exact sounds from phoneme input -- a more robotic
      voice, but every sound is right. Without espeak-ng, `say` reads a rough respelling ("ay toh").
 """
@@ -103,7 +105,7 @@ def espeak_phonemes(sounds):
 
 
 def command(sounds):
-    """The command that says these sounds (for testing: speak() runs it)."""
+    """How to say these sounds: ["say", word] (sent to bin/speaker when it's running), or an espeak-ng command."""
     word = word_for(sounds)
     if word:
         return ["say", word]
@@ -113,14 +115,40 @@ def command(sounds):
     return ["say", " ".join(RESPELL[s] for s in sounds)]
 
 
+SPEAKER = os.path.join(HERE, "bin", "speaker")
 _queue = None
+_speaker = None
+
+
+def _speaker_process():
+    """bin/speaker, started once and kept running (None if it isn't built)."""
+    global _speaker
+    if _speaker is None or _speaker.poll() is not None:
+        _speaker = None
+        if os.access(SPEAKER, os.X_OK):
+            _speaker = subprocess.Popen([SPEAKER], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                        stderr=subprocess.DEVNULL, text=True, bufsize=1)
+    return _speaker
+
+
+def _say(cmd):
+    if cmd[0] == "say":
+        proc = _speaker_process()
+        if proc is not None:
+            try:
+                proc.stdin.write(cmd[1].replace("\n", " ") + "\n")
+                proc.stdin.flush()
+                return
+            except (BrokenPipeError, OSError):
+                pass
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def _worker():
     while True:
         sounds = _queue.get()
         try:  # looking a word up can take a moment the first time; it happens here, not in the decoding loop
-            subprocess.Popen(command(sounds), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _say(command(sounds))
         except Exception:
             pass
 
@@ -137,5 +165,5 @@ def speak(sounds):
 
 
 def warm_up():
-    """Load the word list now (about half a second), so the first spoken word isn't delayed."""
-    threading.Thread(target=_word_index, daemon=True).start()
+    """Load the word list and start the speech voice now, so the first spoken word isn't delayed."""
+    threading.Thread(target=lambda: (_speaker_process(), _word_index()), daemon=True).start()
