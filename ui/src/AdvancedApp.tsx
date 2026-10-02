@@ -43,7 +43,7 @@ export function AdvancedApp({ server, onSimple, onStartOver }: {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" />
-          Trackpad BCI
+          Trackpad gesture to speech
         </div>
         <nav className="tabs">
           {TABS.map((t) => (
