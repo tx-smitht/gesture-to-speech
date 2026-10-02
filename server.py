@@ -26,7 +26,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from live import speak
+from live import speak, warm_up
 from model import BLANK, load_model
 from phonemes import ARPABET, LANGUAGE_PATH, WORD_BREAK, count_sounds, load_inventory, make_prompt, make_word_prompt
 from signals import BIN_S, CONTACT_STATES, DATA_DIR, FEATURE_SETS, HERE, RawTouches, bin_vector, load_trials, \
@@ -278,6 +278,8 @@ class App:
         self.live = {"decoder": StreamingDecoder(model, vocab, keep_words=keep_words, readback=rb), "vocab": vocab,
                      "features": config.get("features", "basic"), "words": [], "texts": [], "current": [],
                      "speak": speak_words, "keep_words": keep_words, "readback": readback}
+        if speak_words:
+            warm_up()  # load the word list for speech now, not on the first word
         self.mode = "live"
         self.guard.block()
         await self.push_state()

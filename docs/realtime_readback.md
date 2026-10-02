@@ -261,7 +261,7 @@ truly need the pause (they're prefixes of other words: "go"/"going", "i"/"ice").
 `NSSpeechSynthesizer.phonemes(from:)` and the C function `CopyPhonemesFromText` both fail with error −50
 (`paramErr`) on this macOS for **every one of the 184 installed voices**, including the classic MacinTalk voices
 (Fred, Albert) that used to support it. `AVSpeechSynthesizer`'s phoneme markers come back empty too. Speech output
-(`say`, `[[inpt PHON]]`) still works. Only the text→phonemes direction is gone, so it can't be fixed from our side.
+(`say` with text) still works, but phoneme *input* is gone too: `say "[[inpt PHON]]mAY"` now reads the brackets aloud. `speech.py` therefore says real words as words and gives everything else to espeak-ng's phoneme input. Neither direction can be fixed from our side.
 
 **Replacement: `pronounce.py`**, which tries two sources in order:
 

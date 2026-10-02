@@ -13,7 +13,6 @@ memory (see streaming.py -- the same code the web app uses).
 
 import argparse
 import os
-import subprocess
 import sys
 import time
 
@@ -25,19 +24,7 @@ from signals import BIN_S, HERE, RawTouches, bin_vector
 from phonemes import WORD_BREAK
 from streaming import StreamingDecoder, make_readback
 
-# ARPAbet -> the phoneme symbols macOS `say` understands in [[inpt PHON]] mode
-MAC_PHONES = {
-    "AA": "AA", "AE": "AE", "AH": "UX", "AO": "AO", "AW": "AW", "AY": "AY", "EH": "EH", "ER": "UXr", "EY": "EY",
-    "IH": "IH", "IY": "IY", "OW": "OW", "OY": "OY", "UH": "UH", "UW": "UW",
-    "B": "b", "CH": "C", "D": "d", "DH": "D", "F": "f", "G": "g", "HH": "h", "JH": "J", "K": "k", "L": "l",
-    "M": "m", "N": "n", "NG": "N", "P": "p", "R": "r", "S": "s", "SH": "S", "T": "t", "TH": "T", "V": "v",
-    "W": "w", "Y": "y", "Z": "z", "ZH": "Z",
-}
-
-
-def speak(sounds):
-    if sounds:
-        subprocess.Popen(["say", "[[inpt PHON]]" + "".join(MAC_PHONES[s] for s in sounds) + "[[inpt TEXT]]"])
+from speech import speak, warm_up  # speak is also used by server.py
 
 
 def main():
@@ -60,6 +47,8 @@ def main():
     decoder = StreamingDecoder(model, vocab, keep_words=args.keep_words, readback=rb,
                                threshold=args.readback or 0.9)
     shown = [0]  # read-back: how many words' spellings have been printed
+    if args.speak:
+        warm_up()
     print(f"Decoding sounds: {' '.join(vocab[1:])}.  Ctrl+C to stop.\n")
 
     def show(events):
