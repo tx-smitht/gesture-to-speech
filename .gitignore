@@ -11,6 +11,7 @@ recordings/
 models/
 dictionary.json
 language.json
+audit.png
 
 # --- Ablation outputs: data snapshots, logs and models trained on your recordings (the scripts are committed) ---
 ablations/results/
