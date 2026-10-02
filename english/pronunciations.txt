@@ -1,0 +1,360 @@
+# word -> ARPAbet sounds (stress marks dropped), following the CMU Pronouncing Dictionary's first pronunciation.
+# Written by hand for the words in corpus.txt; add a line here for every new word.
+a AH
+about AH B AW T
+afternoon AE F T ER N UW N
+again AH G EH N
+agree AH G R IY
+all AO L
+almost AO L M OW S T
+alone AH L OW N
+am AE M
+an AE N
+and AH N D
+answer AE N S ER
+are AA R
+arm AA R M
+ask AE S K
+at AE T
+away AH W EY
+back B AE K
+bad B AE D
+bag B AE G
+bath B AE TH
+bathroom B AE TH R UW M
+be B IY
+bed B EH D
+best B EH S T
+better B EH T ER
+big B IH G
+birthday B ER TH D EY
+blanket B L AE NG K AH T
+book B UH K
+bread B R EH D
+break B R EY K
+breakfast B R EH K F AH S T
+bright B R AY T
+bring B R IH NG
+brother B R AH DH ER
+brush B R AH SH
+buy B AY
+bye B AY
+call K AO L
+called K AO L D
+came K EY M
+can K AE N
+care K EH R
+careful K EH R F AH L
+cat K AE T
+chair CH EH R
+change CH EY N JH
+channel CH AE N AH L
+christmas K R IH S M AH S
+church CH ER CH
+close K L OW Z
+clothes K L OW DH Z
+coffee K AA F IY
+cold K OW L D
+come K AH M
+comfortable K AH M F ER T AH B AH L
+coming K AH M IH NG
+congratulations K AH N G R AE CH AH L EY SH AH N Z
+course K AO R S
+cream K R IY M
+dad D AE D
+dark D AA R K
+daughter D AO T ER
+day D EY
+did D IH D
+dinner D IH N ER
+do D UW
+doctor D AA K T ER
+dog D AO G
+doing D UW IH NG
+done D AH N
+door D AO R
+down D AW N
+dream D R IY M
+drink D R IH NG K
+drive D R AY V
+dry D R AY
+eat IY T
+enough IH N AH F
+evening IY V N IH NG
+everything EH V R IY TH IH NG
+excuse IH K S K Y UW Z
+face F EY S
+family F AE M AH L IY
+fan F AE N
+far F AA R
+fast F AE S T
+fault F AO L T
+feed F IY D
+feel F IY L
+feet F IY T
+find F AY N D
+fine F AY N
+fix F IH K S
+food F UW D
+for F AO R
+forgot F ER G AA T
+found F AW N D
+friend F R EH N D
+friends F R EH N D Z
+fruit F R UW T
+full F UH L
+fun F AH N
+funny F AH N IY
+game G EY M
+get G EH T
+give G IH V
+glad G L AE D
+glasses G L AE S AH Z
+go G OW
+going G OW IH NG
+good G UH D
+goodbye G UH D B AY
+great G R EY T
+grow G R OW
+had HH AE D
+hair HH EH R
+hands HH AE N D Z
+happened HH AE P AH N D
+happy HH AE P IY
+hard HH AA R D
+have HH AE V
+he HH IY
+head HH EH D
+hear HH IY R
+hello HH AH L OW
+help HH EH L P
+her HH ER
+here HH IY R
+hi HH AY
+high HH AY
+him HH IH M
+home HH OW M
+hope HH OW P
+hot HH AA T
+how HH AW
+hungry HH AH NG G R IY
+hurry HH ER IY
+hurts HH ER T S
+i AY
+ice AY S
+idea AY D IY AH
+in IH N
+is IH Z
+it IH T
+job JH AA B
+juice JH UW S
+just JH AH S T
+kids K IH D Z
+kind K AY N D
+know N OW
+late L EY T
+later L EY T ER
+leave L IY V
+leg L EH G
+less L EH S
+let L EH T
+letter L EH T ER
+lie L AY
+lift L IH F T
+light L AY T
+like L AY K
+listen L IH S AH N
+little L IH T AH L
+long L AO NG
+look L UH K
+lost L AO S T
+lot L AA T
+loud L AW D
+louder L AW D ER
+love L AH V
+lower L OW ER
+luck L AH K
+lunch L AH N CH
+maybe M EY B IY
+me M IY
+mean M IY N
+medicine M EH D AH S AH N
+merry M EH R IY
+message M EH S AH JH
+milk M IH L K
+mine M AY N
+minute M IH N AH T
+miss M IH S
+missed M IH S T
+more M AO R
+morning M AO R N IH NG
+mother M AH DH ER
+mouth M AW TH
+move M UW V
+movie M UW V IY
+much M AH CH
+music M Y UW Z IH K
+my M AY
+name N EY M
+need N IY D
+new N UW
+news N UW Z
+next N EH K S T
+nice N AY S
+night N AY T
+no N OW
+noon N UW N
+nose N OW Z
+not N AA T
+now N AW
+nurse N ER S
+of AH V
+off AO F
+okay OW K EY
+old OW L D
+on AA N
+one W AH N
+open OW P AH N
+our AW ER
+out AW T
+outside AW T S AY D
+over OW V ER
+page P EY JH
+pain P EY N
+phone F OW N
+pick P IH K
+pillow P IH L OW
+play P L EY
+please P L IY Z
+problem P R AA B L AH M
+proud P R AW D
+put P UH T
+question K W EH S CH AH N
+quiet K W AY AH T
+radio R EY D IY OW
+rain R EY N
+raining R EY N IH NG
+raise R EY Z
+read R IY D
+ready R EH D IY
+remember R IH M EH M B ER
+remote R IH M OW T
+rest R EH S T
+right R AY T
+roll R OW L
+room R UW M
+sad S AE D
+safe S EY F
+said S EH D
+sandwich S AE N D W IH CH
+say S EY
+score S K AO R
+scratch S K R AE CH
+see S IY
+send S EH N D
+she SH IY
+shirt SH ER T
+shoes SH UW Z
+should SH UH D
+show SH OW
+sick S IH K
+sister S IH S T ER
+sit S IH T
+sleep S L IY P
+sleeping S L IY P IH NG
+slept S L EH P T
+slow S L OW
+smells S M EH L Z
+so S OW
+some S AH M
+something S AH M TH IH NG
+son S AH N
+song S AO NG
+soon S UW N
+sorry S AA R IY
+sounds S AW N D Z
+soup S UW P
+speak S P IY K
+speaker S P IY K ER
+stay S T EY
+stomach S T AH M AH K
+stop S T AA P
+story S T AO R IY
+sunny S AH N IY
+sure SH UH R
+sweet S W IY T
+table T EY B AH L
+take T EY K
+talk T AO K
+tall T AO L
+taste T EY S T
+tastes T EY S T S
+tea T IY
+teeth T IY TH
+tell T EH L
+thank TH AE NG K
+thanks TH AE NG K S
+that DH AE T
+the DH AH
+there DH EH R
+they DH EY
+think TH IH NG K
+thirsty TH ER S T IY
+this DH IH S
+throat TH R OW T
+tight T AY T
+time T AY M
+tired T AY ER D
+to T UW
+today T AH D EY
+together T AH G EH DH ER
+tomorrow T AH M AA R OW
+tonight T AH N AY T
+too T UW
+took T UH K
+try T R AY
+turn T ER N
+tv T IY V IY
+uncomfortable AH N K AH M F ER T AH B AH L
+under AH N D ER
+understand AH N D ER S T AE N D
+up AH P
+us AH S
+very V EH R IY
+wait W EY T
+wake W EY K
+walk W AO K
+want W AA N T
+wants W AA N T S
+warm W AO R M
+was W AA Z
+wash W AA SH
+watch W AA CH
+water W AO T ER
+we W IY
+wear W EH R
+weather W EH DH ER
+welcome W EH L K AH M
+well W EH L
+what W AH T
+when W EH N
+where W EH R
+who HH UW
+whose HH UW Z
+why W AY
+wife W AY F
+will W IH L
+win W IH N
+window W IH N D OW
+with W IH DH
+won W AH N
+work W ER K
+worry W ER IY
+would W UH D
+write R AY T
+year Y IH R
+yes Y EH S
+yet Y EH T
+you Y UW
+your Y AO R
+yours Y UH R Z

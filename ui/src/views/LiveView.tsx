@@ -8,6 +8,7 @@ export function LiveView({ state, live, send }: {
 }) {
   const [speak, setSpeak] = useState(true);
   const [keepWords, setKeepWords] = useState(true);
+  const [readback, setReadback] = useState(false);
   const avgMs = useRef(0);
   const model = state.summary.model;
   const running = state.mode === "live";
@@ -33,15 +34,17 @@ export function LiveView({ state, live, send }: {
             Say each word out loud</label>
           <label className="toggle"><input type="checkbox" checked={keepWords} onChange={(e) => setKeepWords(e.target.checked)} />
             Only my space move ends a word (pausing to think won't split it)</label>
+          <label className="toggle"><input type="checkbox" checked={readback} onChange={(e) => setReadback(e.target.checked)} />
+            Read back real words early: say a word as soon as it's certain, often before its space move (experimental)</label>
         </div>
         <button className="btn btn-primary" disabled={!model.exists || state.mode !== "idle"}
-          onClick={() => send("live_start", { speak, keep_words: keepWords })}>
+          onClick={() => send("live_start", { speak, keep_words: keepWords, readback })}>
           Start decoding
         </button>
         {!model.exists && <p className="warn-text">Train a model first.</p>}
         {live && live.words.length > 0 && (
           <div className="transcript transcript-sm">
-            {live.words.map((w, i) => <span key={i} className="word">{w.join(" ")}</span>)}
+            {live.words.map((w, i) => <span key={i} className="word">{live.texts?.[i] ?? w.join(" ")}</span>)}
           </div>
         )}
       </section>
@@ -58,7 +61,9 @@ export function LiveView({ state, live, send }: {
       </div>
       <div className="transcript" ref={transcript}>
         {(live?.words ?? []).map((w, i) => (
-          <span key={i} className="word" title={w.map((s) => state.arpabet[s]).join(" ")}>{w.join(" ")}</span>
+          <span key={i} className="word" title={w.map((s) => state.arpabet[s]).join(" ")}>
+            {live?.texts?.[i] ?? w.join(" ")}
+          </span>
         ))}
         <span className="word word-current">
           {(live?.current ?? []).join(" ")}

@@ -26,15 +26,18 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from live import speak
-from model import load_model
-from phonemes import ARPABET, LANGUAGE_PATH, WORD_BREAK, count_sounds, load_inventory, make_prompt
-from signals import BIN_S, CONTACT_STATES, DATA_DIR, HERE, RawTouches, bin_vector, load_trials, remove_last_trial, \
-    save_trial
-from streaming import StreamingDecoder
+from live import speak, warm_up
+from model import BLANK, load_model
+from phonemes import ARPABET, LANGUAGE_PATH, WORD_BREAK, count_sounds, load_inventory, make_prompt, make_word_prompt
+from signals import BIN_S, CONTACT_STATES, DATA_DIR, FEATURE_SETS, HERE, RawTouches, bin_vector, load_trials, \
+    remove_last_trial, save_trial
+from streaming import StreamingDecoder, make_readback
 from trackpad_guard import TrackpadGuard
 
 UI_DIST = os.path.join(HERE, "ui", "dist")
+# A running server keeps the code it started with. If any of these change, the browser says to restart.
+CODE_FILES = ["server.py", "signals.py", "phonemes.py", "streaming.py", "model.py", "trackpad_guard.py", "live.py"]
+STARTED = time.time()
 EPOCH_LINE = re.compile(r"epoch\s+(\d+)\s+loss\s+([\d.]+)\s+held-out phoneme error rate\s+([\d.]+)%"
                         r"\s+\(with 2 s extra silence:\s+([\d.]+)%\)")
 BEST_LINE = re.compile(r"Best model: ([\d.]+)% phoneme error rate")
@@ -100,22 +103,33 @@ class App:
             ck = torch.load(self.model_path, weights_only=False)
             c = ck["config"]
             vocab = ck["vocab"][1:]
-            model.update(vocab=vocab, held_out_per=c.get("held_out_per"), epoch=c.get("epoch"),
+            model.update(vocab=vocab, features=c.get("features", "basic"), held_out_per=c.get("held_out_per"),
+                         epoch=c.get("epoch"),
                          n_train=c.get("n_train"), n_test=c.get("n_test"),
                          trained_at=datetime.fromtimestamp(os.path.getmtime(self.model_path)).isoformat(),
                          missing=[s for s in inventory if s not in vocab])
-        return {"inventory": inventory, "counts": counts, "total_trials": len(trials),
+        try:  # the common English words these sounds can say (needs pronounce.py --download)
+            from lexicon import makeable_words
+            prons, ranks = makeable_words(inventory)
+            by_sound = {}  # one entry per gesture sequence: homophones ("see", "sea") are the same gestures
+            for w in sorted(prons, key=ranks.get):
+                by_sound.setdefault(prons[w], []).append(w)
+            words = [{"word": ws[0], "also": ws[1:], "sounds": list(p)} for p, ws in by_sound.items()]
+        except SystemExit:
+            words = None
+        return {"inventory": inventory, "counts": counts, "total_trials": len(trials), "words": words,
                 "sessions": [{"name": k, "trials": v} for k, v in sorted(sessions.items())], "model": model}
 
     def state(self):
         rec = None
         if self.rec:
-            rec = {k: self.rec[k] for k in ("prompt", "n", "session")} | {"saved": len(self.rec["saved"])}
+            rec = {k: self.rec[k] for k in ("prompt", "words", "kind", "n", "session")} | {"saved": len(self.rec["saved"])}
         live = None
         if self.live:
-            live = {k: self.live[k] for k in ("words", "current", "speak", "keep_words")}
+            live = {k: self.live[k] for k in ("words", "texts", "current", "speak", "keep_words", "readback")}
         guard = {"available": self.guard.available, "locked": self.guard.locked, "error": self.guard.error}
-        return {"type": "state", "mode": self.mode, "summary": self.summary, "recording": rec, "live": live,
+        stale = [f for f in CODE_FILES if os.path.getmtime(os.path.join(HERE, f)) > STARTED]
+        return {"type": "state", "mode": self.mode, "stale_code": stale, "feature_sets": list(FEATURE_SETS), "summary": self.summary, "recording": rec, "live": live,
                 "training": self.train, "guard": guard, "arpabet": ARPABET, "word_break": WORD_BREAK}
 
     async def send(self, msg, ws=None):
@@ -154,33 +168,44 @@ class App:
             next_t += BIN_S
             await asyncio.sleep(max(0.0, next_t - time.monotonic()))
             frames = self.rt.take()
-            x = bin_vector(frames, self.rt.pad)
+            x = bin_vector(frames, self.rt.pad)  # the activity map: what the grid and raster display
             self.tick += 1
             if self.rec is not None:
                 self.rec["frames"] += frames
             if self.live is not None:
-                await self._live_step(x)
+                features = self.live["features"]  # the model gets the input it was trained on
+                await self._live_step(x if features == "basic" else bin_vector(frames, self.rt.pad, features))
             if self.clients:  # every bin, numbered: the signal raster draws one column per bin
                 await self.send({"type": "grid", "n": self.tick, "v": [round(float(v), 2) for v in x]})
 
     # ------------------------------------------------------------------ recording (the Copy Task)
 
-    async def record_start(self, n):
+    async def record_start(self, n, kind="sounds"):
+        """kind: "sounds" (random sound sentences), "words" (real English words your sounds can say) or "mix"."""
         if self.mode != "idle":
             return
+        if kind != "sounds" and not self.summary.get("words"):
+            await self.notice("No real words available yet (run: uv run pronounce.py --download) -- using sounds",
+                              "warn")
+            kind = "sounds"
         self.rec = {"session": f"session_{datetime.now():%Y%m%d-%H%M%S}", "n": max(1, int(n)), "saved": [],
-                    "inventory": load_inventory(), "frames": [], "t_start": time.monotonic()}
-        self.rec["prompt"] = self._next_prompt()
+                    "saved_words": [], "kind": kind, "inventory": load_inventory(), "frames": [],
+                    "t_start": time.monotonic()}
+        self.rec["prompt"], self.rec["words"] = self._next_prompt()
         self.mode = "recording"
         self.guard.block()
         await self.push_state()
 
     def _next_prompt(self):
-        """Favour sounds with the fewest examples, counting this session's saved trials too."""
+        """(sound tokens, English words or None). Favours sounds with the fewest examples, counting this session's
+        saved trials too. "mix" alternates: real words, then random sounds."""
         counts = dict(self.summary["counts"])
         for tok, n in count_sounds(self.rec["saved"]).items():
             counts[tok] = counts.get(tok, 0) + n
-        return make_prompt(self.rec["inventory"], counts=counts)
+        kind = self.rec["kind"]
+        if kind == "words" or (kind == "mix" and len(self.rec["saved"]) % 2 == 0):
+            return make_word_prompt(self.rec["inventory"], counts=counts)
+        return make_prompt(self.rec["inventory"], counts=counts), None
 
     def _restart_trial(self):
         self.rec["frames"], self.rec["t_start"] = [], time.monotonic()
@@ -196,13 +221,15 @@ class App:
             await self.notice("No touches recorded -- try again", "warn")
             return
         path = os.path.join(self.data_dir, rec["session"] + ".jsonl")
-        save_trial(path, rec["prompt"], frames, t_end - rec["t_start"], self.rt.pad)
+        save_trial(path, rec["prompt"], frames, t_end - rec["t_start"], self.rt.pad,
+                   **({"words": rec["words"]} if rec["words"] else {}))
         rec["saved"].append(rec["prompt"])
+        rec["saved_words"].append(rec["words"])
         if len(rec["saved"]) >= rec["n"]:
             await self.stop()
             await self.notice(f"Session complete: {rec['n']} sentences saved")
             return
-        rec["prompt"] = self._next_prompt()
+        rec["prompt"], rec["words"] = self._next_prompt()
         self._restart_trial()
         await self.push_state()
 
@@ -219,7 +246,7 @@ class App:
             await self.notice("Nothing saved yet to undo", "warn")
             return
         remove_last_trial(os.path.join(self.data_dir, rec["session"] + ".jsonl"))
-        rec["prompt"] = rec["saved"].pop()
+        rec["prompt"], rec["words"] = rec["saved"].pop(), rec["saved_words"].pop()
         self._restart_trial()
         await self.notice(f"Removed sentence {len(rec['saved']) + 1} -- do it again")
         await self.push_state()
@@ -232,17 +259,27 @@ class App:
             self._model_cache = (mtime, load_model(self.model_path))
         return self._model_cache[1]
 
-    async def live_start(self, speak_words, keep_words):
+    async def live_start(self, speak_words, keep_words, readback=False):
         if self.mode != "idle":
             return
         if not os.path.exists(self.model_path):
             await self.notice("No model yet -- train one first", "warn")
             return
-        model, vocab, _ = self._model()
+        model, vocab, config = self._model()
         with torch.no_grad():  # warm-up: PyTorch's first call is slow; do it now, not on your first touch
             model(torch.zeros(1, 1, model.inp[0].in_features))
-        self.live = {"decoder": StreamingDecoder(model, vocab, keep_words=keep_words), "vocab": vocab,
-                     "words": [], "current": [], "speak": speak_words, "keep_words": keep_words}
+        rb = None
+        if readback:  # speak each word once it's certain (readback.py), not when its space move is decoded
+            try:
+                rb = make_readback(vocab, [s for s in vocab if s not in (BLANK, WORD_BREAK)])
+            except SystemExit as e:  # the pronunciation dictionaries haven't been downloaded
+                await self.notice(str(e), "warn")
+                return
+        self.live = {"decoder": StreamingDecoder(model, vocab, keep_words=keep_words, readback=rb), "vocab": vocab,
+                     "features": config.get("features", "basic"), "words": [], "texts": [], "current": [],
+                     "speak": speak_words, "keep_words": keep_words, "readback": readback}
+        if speak_words:
+            warm_up()  # load the word list for speech now, not on the first word
         self.mode = "live"
         self.guard.block()
         await self.push_state()
@@ -251,6 +288,9 @@ class App:
         lv = self.live
         dec = lv["decoder"]
         events = dec.push(x)
+        n_words = sum(kind == "word" and bool(value) for kind, value in events)
+        if dec.readback is not None and n_words:
+            lv["texts"] += dec.texts[-n_words:]  # how each read-back word is spelled ("see/sea")
         for kind, value in events:
             if kind == "sound":
                 lv["current"].append(value)
@@ -263,7 +303,7 @@ class App:
         stepped = dec.stepped
         if events or stepped:
             msg = {"type": "live", "n": self.tick, "events": events, "words": lv["words"][-40:],
-                   "current": lv["current"]}
+                   "texts": lv["texts"][-40:], "current": lv["current"]}
             if stepped:
                 msg |= {"probs": dict(zip(lv["vocab"], (round(float(p), 3) for p in dec.probs))),
                         "infer_ms": round(dec.infer_ms, 2)}
@@ -271,7 +311,7 @@ class App:
 
     async def live_clear(self):
         if self.live:
-            self.live["words"], self.live["current"] = [], []
+            self.live["words"], self.live["texts"], self.live["current"] = [], [], []
             await self.push_state()
 
     # ------------------------------------------------------------------ stopping any mode
@@ -279,7 +319,11 @@ class App:
     async def stop(self):
         self.guard.allow()
         if self.live:
-            for _, word in self.live["decoder"].flush():
+            dec = self.live["decoder"]
+            flushed = [word for _, word in dec.flush() if word]
+            if dec.readback is not None and flushed:
+                self.live["texts"] += dec.texts[-len(flushed):]
+            for word in flushed:
                 self.live["words"].append(word)
                 if self.live["speak"]:
                     speak(word)
@@ -291,14 +335,16 @@ class App:
 
     # ------------------------------------------------------------------ training
 
-    async def train_start(self, epochs):
+    async def train_start(self, epochs, features="basic"):
         if self.train["running"]:
             return
         epochs = max(5, int(epochs))
+        features = features if features in FEATURE_SETS else "basic"
         self.train = {"running": True, "epochs": epochs, "history": [], "result": None, "log": []}
         await self.push_state()
         self._train_proc = await asyncio.create_subprocess_exec(
             sys.executable, "-u", os.path.join(HERE, "train.py"), self.data_dir, "--epochs", str(epochs),
+            "--features", features,
             "--out", self.model_path, cwd=HERE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
         asyncio.create_task(self._train_watch(self._train_proc))
 
@@ -349,7 +395,7 @@ class App:
     async def handle(self, msg):
         cmd = msg.get("cmd")
         if cmd == "record_start":
-            await self.record_start(msg.get("n", 20))
+            await self.record_start(msg.get("n", 20), msg.get("kind", "sounds"))
         elif cmd == "accept":
             await self.record_accept()
         elif cmd == "redo":
@@ -359,11 +405,11 @@ class App:
         elif cmd == "stop":
             await self.stop()
         elif cmd == "live_start":
-            await self.live_start(bool(msg.get("speak")), bool(msg.get("keep_words")))
+            await self.live_start(bool(msg.get("speak")), bool(msg.get("keep_words")), bool(msg.get("readback")))
         elif cmd == "live_clear":
             await self.live_clear()
         elif cmd == "train_start":
-            await self.train_start(msg.get("epochs", 200))
+            await self.train_start(msg.get("epochs", 200), msg.get("features", "basic"))
         elif cmd == "train_stop":
             await self.train_stop()
         elif cmd == "inventory_set":

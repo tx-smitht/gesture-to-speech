@@ -3,6 +3,7 @@
 
     python simulate.py -n 300                  # uses your language.json sounds
     python simulate.py -n 600 --all-phonemes   # all 39 sounds -- a much harder language
+    python simulate.py --sentences english/corpus.txt --all-phonemes   # perform real English sentences
 
 Writes trials in exactly the format collect.py does (to data_sim/ by default), so the rest of the pipeline can't
 tell the difference. Use it to check the pipeline learns before spending your own time recording.
@@ -37,13 +38,16 @@ def invent_language(sounds, rng):
     return lang
 
 
-def perform(prompt, lang, rng):
-    """Turn a prompt into trackpad frames the way a (slightly sloppy) person would."""
+def perform(prompt, lang, rng, jitter_mm=POS_JITTER_MM, word_pause_s=WORD_PAUSE_S):
+    """Turn a prompt into trackpad frames the way a (slightly sloppy) person would.
+    Also returns when each sound's move started and ended ([t0, t1] per sound, word breaks skipped), so
+    experiments can measure how long after a word was finished the decoder spoke it.
+    word_pause_s: the gap between words. Set it to PAUSE_S for someone who doesn't pause between words at all."""
     t = rng.uniform(0.4, 1.2)  # reaction time before starting
     strokes = []
     for i, tok in enumerate(prompt):
         if tok == WORD_BREAK:
-            t += rng.uniform(*WORD_PAUSE_S)
+            t += rng.uniform(*word_pause_s)
             continue
         if i and prompt[i - 1] != WORD_BREAK:
             t += rng.uniform(*PAUSE_S)
@@ -52,7 +56,7 @@ def perform(prompt, lang, rng):
         dur = rng.uniform(0.15, 0.30) if moving else rng.uniform(0.06, 0.14)
         strokes.append({
             "t0": t, "t1": t + dur,
-            "x": g["x"] + rng.gauss(0, POS_JITTER_MM), "y": g["y"] + rng.gauss(0, POS_JITTER_MM),
+            "x": g["x"] + rng.gauss(0, jitter_mm), "y": g["y"] + rng.gauss(0, jitter_mm),
             "dx": g["dx"] * rng.uniform(0.7, 1.3), "dy": g["dy"] * rng.uniform(0.7, 1.3),
             "major": rng.uniform(13, 15.5) if g["thumb"] else rng.uniform(8, 10),
             "minor": rng.uniform(7.2, 8.4),
@@ -73,32 +77,48 @@ def perform(prompt, lang, rng):
                                 round(s["major"], 2), round(s["minor"], 2), round(s["pressure"], 3)])
         if touches:
             frames.append((ft, touches))
-    return frames, duration
+    return frames, duration, [[round(s["t0"], 3), round(s["t1"], 3)] for s in strokes]
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("-n", type=int, default=300, help="number of trials")
     p.add_argument("--all-phonemes", action="store_true", help="use all 39 sounds instead of language.json")
+    p.add_argument("--sentences", metavar="FILE",
+                   help="perform these English sentences (one per line, words from english/pronunciations.txt) "
+                        "instead of random prompts; -n is then how many times each sentence is performed")
+    p.add_argument("--jitter", type=float, default=POS_JITTER_MM, help="how sloppy the taps are (mm)")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--name", help="output file name (default: sim_<sounds>sounds_seed<seed>)")
     p.add_argument("--out", default=os.path.join(HERE, "data_sim"))
     args = p.parse_args()
 
     rng = random.Random(args.seed)
     sounds = list(ARPABET) if args.all_phonemes else load_inventory()
-    lang = invent_language(sounds, rng)
+    lang = invent_language(sounds, rng)  # drawn first, so the same seed is the same participant in every mode
+
+    if args.sentences:
+        from lexicon import load_pronunciations, read_sentences
+        pron = load_pronunciations()
+        jobs = [(words, [tok for w in words for tok in (*pron[w], WORD_BREAK)])
+                for words in read_sentences(args.sentences) for _ in range(args.n)]
+        rng.shuffle(jobs)
+    else:  # a generator, so prompts and performances draw from rng in the same order as before
+        jobs = ((None, make_prompt(sounds, rng)) for _ in range(args.n))
 
     os.makedirs(args.out, exist_ok=True)
-    path = os.path.join(args.out, f"sim_{len(sounds)}sounds_seed{args.seed}.jsonl")
+    path = os.path.join(args.out, (args.name or f"sim_{len(sounds)}sounds_seed{args.seed}") + ".jsonl")
     if os.path.exists(path):
         os.remove(path)
-    for _ in range(args.n):
-        prompt = make_prompt(sounds, rng)
-        frames, duration = perform(prompt, lang, rng)
-        save_trial(path, prompt, frames, duration, PAD, simulated=True)
+    n = 0
+    for words, prompt in jobs:
+        n += 1
+        frames, duration, timing = perform(prompt, lang, rng, args.jitter)
+        extra = {"words": words} if words else {}
+        save_trial(path, prompt, frames, duration, PAD, simulated=True, timing=timing, **extra)
     with open(path.replace(".jsonl", "_language.json"), "w") as f:
         json.dump(lang, f, indent=1)
-    print(f"{args.n} simulated trials ({len(sounds)} sounds) -> {path}")
+    print(f"{n} simulated trials ({len(sounds)} sounds) -> {path}")
 
 
 if __name__ == "__main__":

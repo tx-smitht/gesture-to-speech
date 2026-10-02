@@ -1,21 +1,33 @@
 // Small shared pieces: prompts, key hints, sound balance, line chart.
 import type { ReactNode } from "react";
 
-export function Prompt({ tokens, arpabet, wordBreak, size = "lg" }: {
-  tokens: string[]; arpabet: Record<string, string>; wordBreak: string; size?: "lg" | "md";
+export function Prompt({ tokens, arpabet, wordBreak, words, size = "lg" }: {
+  tokens: string[]; arpabet: Record<string, string>; wordBreak: string; words?: string[] | null; size?: "lg" | "md";
 }) {
+  const token = (t: string, i: number) =>
+    t === wordBreak ? (
+      <span key={i} className="token-break" title="word break: your space move">space</span>
+    ) : (
+      <span key={i} className="token">
+        <span className="token-sym">{t}</span>
+        <span className="token-hint">{arpabet[t]}</span>
+      </span>
+    );
+  if (!words) return <div className={`prompt prompt-${size}`}>{tokens.map(token)}</div>;
+  // Real-word prompt: each word's sounds grouped under the word itself
+  const groups: [number, string][][] = [[]];
+  tokens.forEach((t, i) => {
+    groups[groups.length - 1].push([i, t]);
+    if (t === wordBreak) groups.push([]);
+  });
   return (
     <div className={`prompt prompt-${size}`}>
-      {tokens.map((t, i) =>
-        t === wordBreak ? (
-          <span key={i} className="token-break" title="word break: your space move">space</span>
-        ) : (
-          <span key={i} className="token">
-            <span className="token-sym">{t}</span>
-            <span className="token-hint">{arpabet[t]}</span>
-          </span>
-        ),
-      )}
+      {groups.filter((g) => g.length).map((g, k) => (
+        <span key={k} className="word-group">
+          <span className="word-label">{words[k]}</span>
+          <span className="word-tokens">{g.map(([i, t]) => token(t, i))}</span>
+        </span>
+      ))}
     </div>
   );
 }

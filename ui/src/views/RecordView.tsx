@@ -1,10 +1,13 @@
 // Calibration (the "Copy Task"): see a sentence of sounds, perform it on the trackpad, press Enter.
 import { useState } from "react";
 import { Key, Prompt } from "../components/bits";
-import type { State, Send } from "../server";
+import type { PromptKind, State, Send } from "../server";
+
+const KINDS: [PromptKind, string][] = [["mix", "Mix"], ["words", "Real words"], ["sounds", "Random sounds"]];
 
 export function RecordView({ state, send }: { state: State; send: Send }) {
   const [n, setN] = useState(20);
+  const [kind, setKind] = useState<PromptKind>("mix");
   const rec = state.recording;
   const { summary } = state;
 
@@ -16,7 +19,7 @@ export function RecordView({ state, send }: { state: State; send: Send }) {
           <span className="caption">{rec.session}</span>
         </div>
         <div className="progress"><span style={{ width: `${(100 * rec.saved) / rec.n}%` }} /></div>
-        <Prompt tokens={rec.prompt} arpabet={state.arpabet} wordBreak={state.word_break} />
+        <Prompt tokens={rec.prompt} words={rec.words} arpabet={state.arpabet} wordBreak={state.word_break} />
         <p className="instruction">Perform the sentence on the trackpad, ending each word with your space move.</p>
         <div className="keys">
           <Key k="Enter">save</Key>
@@ -45,11 +48,20 @@ export function RecordView({ state, send }: { state: State; send: Send }) {
             <button key={v} className={n === v ? "on" : ""} onClick={() => setN(v)}>{v} sentences</button>
           ))}
         </div>
-        <button className="btn btn-primary" onClick={() => send("record_start", { n })} disabled={state.mode !== "idle"}>
+        <div className="segmented" role="radiogroup" aria-label="Prompts">
+          {KINDS.map(([k, label]) => (
+            <button key={k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}
+              disabled={k !== "sounds" && !summary.words?.length}>{label}</button>
+          ))}
+        </div>
+        <button className="btn btn-primary" onClick={() => send("record_start", { n, kind })} disabled={state.mode !== "idle"}>
           Start recording
         </button>
       </div>
       <p className="caption balance-note">
+        {kind === "sounds" ? "Random sound sentences cover every combination of your sounds. "
+          : kind === "words" ? `Real English words your sounds can say (${summary.words?.length ?? 0} of them), for word read-back. `
+          : "Alternates real words and random sounds: words for read-back, random sounds to cover every combination. "}
         Prompts favour the sounds with the fewest examples, so new sounds catch up:{" "}
         {[...summary.inventory]
           .sort((a, b) => (summary.counts[a] ?? 0) - (summary.counts[b] ?? 0))

@@ -3,6 +3,7 @@
 
     python collect.py          # 20 prompts
     python collect.py -n 50
+    python collect.py --words   # prompts made of real English words your sounds can say ("see my team")
 
 For each prompt, perform it on the trackpad, then press a key (no Enter needed):
     Enter            accept -- save this trial and move on
@@ -20,7 +21,7 @@ import time
 import tty
 from datetime import datetime
 
-from phonemes import count_sounds, load_inventory, make_prompt, show
+from phonemes import count_sounds, load_inventory, make_prompt, make_word_prompt, show
 from signals import CONTACT_STATES, DATA_DIR, RawTouches, load_trials, remove_last_trial, save_trial
 
 KEYS = {"\n": "accept", "\r": "accept", "r": "redo", "u": "undo", "\x7f": "undo", "\x08": "undo", "q": "quit"}
@@ -43,6 +44,8 @@ def read_key():
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("-n", type=int, default=20, help="number of prompts")
+    p.add_argument("--words", action="store_true",
+                   help="prompts of real English words (for testing word read-back) instead of random sounds")
     args = p.parse_args()
 
     inventory = load_inventory()
@@ -53,7 +56,13 @@ def main():
     saved_prompts = []  # prompts of the trials saved so far, so undo can bring them back
     earlier = [t["prompt"] for t in load_trials(DATA_DIR)] if os.path.isdir(DATA_DIR) else []
 
+    words = {}  # prompt (as a tuple) -> its English words, for --words prompts
+
     def next_prompt():
+        if args.words:
+            tokens, w = make_word_prompt(inventory, counts=count_sounds(earlier + saved_prompts))
+            words[tuple(tokens)] = w
+            return tokens
         # Favour sounds with the fewest examples, counting this session's saved trials too
         return make_prompt(inventory, counts=count_sounds(earlier + saved_prompts))
 
@@ -66,7 +75,8 @@ def main():
         prompt = next_prompt()
         try:
             while len(saved_prompts) < args.n:
-                print(f"[{len(saved_prompts) + 1}/{args.n}]  {show(prompt)}")
+                said = f"  {' '.join(words[tuple(prompt)]).upper()}:" if tuple(prompt) in words else ""
+                print(f"[{len(saved_prompts) + 1}/{args.n}]{said}  {show(prompt)}")
                 rt.take()  # discard anything before the prompt appeared
                 t_start = time.monotonic()
                 action = None
@@ -91,7 +101,8 @@ def main():
                 if not any(tc[1] in CONTACT_STATES for _, touches in frames for tc in touches):
                     print("        (no touches recorded -- try again)")
                     continue
-                save_trial(path, prompt, frames, t_end - t_start, rt.pad)
+                extra = {"words": words[tuple(prompt)]} if tuple(prompt) in words else {}
+                save_trial(path, prompt, frames, t_end - t_start, rt.pad, **extra)
                 saved_prompts.append(prompt)
                 print("        saved")
                 prompt = next_prompt()

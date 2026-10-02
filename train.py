@@ -5,6 +5,7 @@
     python train.py data_sim/           # simulated participant
     python train.py --epochs 100 --out models/mine.pt
     python train.py --test-session 20260929-114512   # train on the other sessions, test on this whole one
+    python train.py --fold 2/5          # cross-validation: hold out the 3rd of 5 fixed slices of the trials
 
 About 15% of trials are held out and never trained on; accuracy is only ever measured on those. Which trials are held
 out is fixed per trial, so adding new sessions never reshuffles the test set -- scores stay comparable over time.
@@ -21,7 +22,17 @@ import torch
 import torch.nn as nn
 
 from model import BLANK, Decoder, edit_distance, greedy_decode, load_model, save_model
-from signals import BIN_S, HERE, N_CHANNELS, featurize, load_trials
+from signals import BIN_S, FEATURE_SETS, HERE, featurize, load_trials, n_channels
+
+
+def in_test_set(trial, test_frac=0.15):
+    """A fixed coin flip per trial: the same trial is always test (or always train), however much data you add."""
+    return zlib.crc32(f"{trial['session']}:{trial['index']}".encode()) % 1000 < test_frac * 1000
+
+
+def in_fold(trial, fold, n_folds):
+    """Cross-validation: which of n_folds fixed slices a trial belongs to (a different hash from in_test_set)."""
+    return zlib.crc32(f"fold:{trial['session']}:{trial['index']}".encode()) % n_folds == fold
 
 
 def batches(items, size, shuffle):
@@ -43,7 +54,7 @@ def pad_batch(batch, noise=0.0, max_lead_s=0.0, max_trail_s=0.0):
     leads = [random.randint(0, int(max_lead_s / BIN_S)) for _ in batch]
     trails = [random.randint(0, int(max_trail_s / BIN_S)) for _ in batch]
     lengths = torch.tensor([lead + len(x) + trail for (x, _), lead, trail in zip(batch, leads, trails)])
-    X = torch.zeros(len(batch), max(int(lengths.max()), 14), N_CHANNELS)
+    X = torch.zeros(len(batch), max(int(lengths.max()), 14), batch[0][0].shape[1])
     for i, ((x, _), lead) in enumerate(zip(batch, leads)):
         X[i, lead:lead + len(x)] = torch.from_numpy(x)
     if noise:
@@ -59,7 +70,7 @@ def evaluate(model, data, vocab, show=0, lead_s=0.0):
     edits = total = 0
     examples = []
     if lead_s:
-        silence = np.zeros((int(lead_s / BIN_S), N_CHANNELS), dtype=np.float32)
+        silence = np.zeros((int(lead_s / BIN_S), data[0][0].shape[1]), dtype=np.float32)
         data = [(np.concatenate([silence, x]), target) for x, target in data]
     with torch.no_grad():
         for batch in batches(data, 32, shuffle=False):
@@ -85,9 +96,12 @@ def main():
     p.add_argument("--layers", type=int, default=2)
     p.add_argument("--lr", type=float, default=2e-3)
     p.add_argument("--noise", type=float, default=0.05, help="augmentation: random static added while training")
+    p.add_argument("--features", choices=FEATURE_SETS, default="basic",
+                   help="basic = one activity map; shape = adds contact size and orientation maps")
     p.add_argument("--test-frac", type=float, default=0.15)
     p.add_argument("--test-session", metavar="NAME",
                    help="hold out every trial of the session whose file name contains NAME (a 'new day' test)")
+    p.add_argument("--fold", metavar="I/N", help="cross-validation: hold out slice I (0-based) of N instead")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default=os.path.join(HERE, "models", "decoder.pt"))
     args = p.parse_args()
@@ -104,15 +118,18 @@ def main():
     index = {s: i for i, s in enumerate(vocab)}
 
     t0 = time.time()
-    data = [(featurize(t), [index[tok] for tok in t["prompt"]]) for t in trials]
+    data = [(featurize(t, args.features), [index[tok] for tok in t["prompt"]]) for t in trials]
     print(f"{len(trials)} trials, {sum(len(x) for x, _ in data) * BIN_S / 60:.1f} min of signal, "
-          f"symbols: {' '.join(vocab[1:])}  (featurized in {time.time() - t0:.1f}s)")
+          f"symbols: {' '.join(vocab[1:])}  (features: {args.features}, {n_channels(args.features)} channels, "
+          f"featurized in {time.time() - t0:.1f}s)")
 
     def held_out(t):
+        if args.fold:
+            i, n = map(int, args.fold.split("/"))
+            return in_fold(t, i, n)
         if args.test_session:
             return args.test_session in t["session"]
-        # A fixed coin flip per trial: the same trial is always test (or always train), however much data you add
-        return zlib.crc32(f"{t['session']}:{t['index']}".encode()) % 1000 < args.test_frac * 1000
+        return in_test_set(t, args.test_frac)
 
     train, test_by_session = [], {}
     for t, item in zip(trials, data):
@@ -126,11 +143,11 @@ def main():
     n_symbols = sum(len(tgt) for _, tgt in test)
     print(f"train on {len(train)}, test on {len(test)} held-out trials ({n_symbols} symbols)\n")
 
-    model = Decoder(N_CHANNELS, len(vocab), args.hidden, args.layers)
+    model = Decoder(n_channels(args.features), len(vocab), args.hidden, args.layers)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.epochs * -(-len(train) // 16))
     ctc = nn.CTCLoss(blank=0, zero_infinity=True)
-    config = {"n_in": N_CHANNELS, "hidden": args.hidden, "layers": args.layers, "bin_s": BIN_S,
+    config = {"n_in": n_channels(args.features), "features": args.features, "hidden": args.hidden, "layers": args.layers, "bin_s": BIN_S,
               "patch_len": model.patch_len, "patch_stride": model.patch_stride}
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)

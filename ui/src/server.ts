@@ -2,10 +2,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Mode = "idle" | "recording" | "live";
+export type PromptKind = "sounds" | "words" | "mix";
 
 export interface ModelInfo {
   exists: boolean;
   vocab?: string[];
+  features?: string; // which input maps it was trained on
   held_out_per?: number | null; // fraction, 0.138 = 13.8%
   epoch?: number | null;
   n_train?: number | null;
@@ -18,6 +20,8 @@ export interface Summary {
   inventory: string[];
   counts: Record<string, number>;
   total_trials: number;
+  // common English words your sounds can say, one per gesture sequence (null: dictionary not downloaded)
+  words: { word: string; also: string[]; sounds: string[] }[] | null;
   sessions: { name: string; trials: number }[];
   model: ModelInfo;
 }
@@ -37,16 +41,19 @@ export interface TrainResult {
 export interface State {
   mode: Mode;
   summary: Summary;
-  recording: { prompt: string[]; n: number; saved: number; session: string } | null;
-  live: { words: string[][]; current: string[]; speak: boolean; keep_words: boolean } | null;
+  recording: { prompt: string[]; words: string[] | null; kind: PromptKind; n: number; saved: number; session: string } | null;
+  live: { words: string[][]; texts: string[]; current: string[]; speak: boolean; keep_words: boolean; readback: boolean } | null;
   training: { running: boolean; epochs: number; history: EpochPoint[]; result: TrainResult | null; log: string[] };
   guard: { available: boolean; locked: boolean; error: string | null };
   arpabet: Record<string, string>;
   word_break: string;
+  stale_code: string[]; // code files changed since the server started: it needs a restart to use them
+  feature_sets: string[];
 }
 
 export interface LiveFrame {
   words: string[][];
+  texts?: string[]; // read-back: how each word is spelled ("see/sea"; unknown words end in "?")
   current: string[];
   probs?: Record<string, number>;
   infer_ms?: number;
@@ -136,7 +143,7 @@ export function useServer() {
             setState(msg as State);
             setHistory(msg.training.history);
             setLog(msg.training.log);
-            if (msg.live) setLive((prev) => ({ ...prev, words: msg.live.words, current: msg.live.current }));
+            if (msg.live) setLive((prev) => ({ ...prev, words: msg.live.words, texts: msg.live.texts, current: msg.live.current }));
             break;
           case "live":
             setLive((prev) => ({ ...prev, ...msg }));

@@ -1,5 +1,6 @@
 #!/bin/bash
-# One-time setup for the web app: Python packages, the trackpad lock (Swift) and the UI (TypeScript).
+# One-time setup for the web app: Python packages, the trackpad lock (Swift), the UI (TypeScript)
+# and the pronunciation dictionary.
 # Each step shows its latest 10 lines of output, indented, while it runs.
 set -e
 cd "$(dirname "$0")"
@@ -59,9 +60,13 @@ fi
 build_ui() { cd ui && npm install --no-fund --no-audit && npm run build; }
 
 # --no-cache: torch is large and the wheel isn't worth keeping in uv's cache after install
-step "1/3  Python packages (uv, .venv)" uv sync --no-cache
-step "2/3  Trackpad lock (Swift)"       bash -c 'mkdir -p bin && swiftc -O guard/TrackpadGuard.swift -o bin/trackpad-guard'
-step "3/3  Web UI (TypeScript)"         build_ui
+step "1/4  Python packages (uv, .venv)" uv sync --no-cache
+step "2/4  Trackpad lock + speech helper (Swift)" \
+  bash -c 'mkdir -p bin && swiftc -O guard/TrackpadGuard.swift -o bin/trackpad-guard && swiftc -O guard/Speaker.swift -o bin/speaker'
+step "3/4  Web UI (TypeScript)"         build_ui
+step "4/4  Pronunciation dictionary + word-frequency list (english/, ~3.7 MB)" \
+  bash -c '[ -f english/cmudict.dict ] && [ -f english/common_words.txt ] && echo "already downloaded" || uv run pronounce.py --download'
+command -v espeak-ng > /dev/null || echo "${INDENT}optional: brew install espeak-ng  (pronounces words the dictionary doesn't have)"
 
 echo
 echo "Done. Start the app with:  uv run server.py"

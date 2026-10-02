@@ -72,6 +72,13 @@ export default function App() {
         </div>
       </header>
 
+      {state && (state.stale_code?.length ?? 0) > 0 && (
+        <div className="banner banner-strong">
+          The app's code has changed since the server started ({state.stale_code.join(", ")}). Restart it to use the
+          changes: press <kbd>Ctrl</kbd>+<kbd>C</kbd> in its terminal, then run <code>uv run server.py</code> again.
+        </div>
+      )}
+
       {guard && !guard.available && mode === "idle" && (
         <div className="banner">
           {guard.error === "turned off" ? (
