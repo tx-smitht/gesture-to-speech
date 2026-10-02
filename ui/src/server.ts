@@ -6,6 +6,8 @@ export type PromptKind = "sounds" | "words" | "mix";
 
 export interface ModelInfo {
   exists: boolean;
+  name: string; // file in models/
+  since: string | null; // started over: learns only from sessions from this one on (null: all recordings)
   vocab?: string[];
   features?: string; // which input maps it was trained on
   held_out_per?: number | null; // fraction, 0.138 = 13.8%
@@ -16,6 +18,16 @@ export interface ModelInfo {
   missing?: string[]; // sounds in your language the model can't output yet
 }
 
+/** A decoder on disk (models/*.pt), for choosing which one to use. */
+export interface DecoderInfo {
+  name: string;
+  exists: boolean; // false: just started over, not trained yet
+  since: string | null;
+  held_out_per?: number | null;
+  n_trials?: number;
+  trained_at?: string;
+}
+
 export interface Summary {
   inventory: string[];
   counts: Record<string, number>;
@@ -24,6 +36,7 @@ export interface Summary {
   words: { word: string; also: string[]; sounds: string[] }[] | null;
   sessions: { name: string; trials: number }[];
   model: ModelInfo;
+  decoders: DecoderInfo[];
 }
 
 export interface EpochPoint {

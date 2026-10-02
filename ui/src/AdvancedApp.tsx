@@ -18,7 +18,9 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "sounds", label: "Sounds" },
 ];
 
-export function AdvancedApp({ server, onSimple }: { server: ReturnType<typeof useServer>; onSimple: () => void }) {
+export function AdvancedApp({ server, onSimple, onStartOver }: {
+  server: ReturnType<typeof useServer>; onSimple: () => void; onStartOver: (freshRecordings: boolean) => void;
+}) {
   const { state, connected, live, history, log, notices, grid, signal, markers, send } = server;
   const [tab, setTab] = useState<Tab>("record");
   const mode = state?.mode ?? "idle";
@@ -86,7 +88,7 @@ export function AdvancedApp({ server, onSimple }: { server: ReturnType<typeof us
         <main className={`layout ${tab === "signals" ? "layout-wide" : ""}`}>
           <div className="main-col">
             {tab === "record" && <RecordView state={state} send={send} />}
-            {tab === "train" && <TrainView state={state} history={history} log={log} send={send} />}
+            {tab === "train" && <TrainView state={state} history={history} log={log} send={send} onStartOver={onStartOver} />}
             {tab === "live" && <LiveView state={state} live={live} send={send} />}
             {tab === "signals" && <SignalsView state={state} signal={signal} markers={markers} send={send} />}
             {tab === "sounds" && <SoundsView state={state} send={send} />}

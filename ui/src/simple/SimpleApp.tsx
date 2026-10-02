@@ -1,11 +1,13 @@
 // The simple, guided face of the app. A first visit walks through it one step at a time:
 //   welcome -> "this is your trackpad" -> practise one sound -> practise space -> record 10 sentences -> train
 // and then lands on two tabs: "Record more data" and "Help me speak". Everything else lives in the advanced view.
+// If a decoder is already trained, a first visit goes straight to the tabs (?intro, or Advanced > Start over, shows
+// the intro anyway).
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { GridCanvas } from "../components/ElectrodeGrid";
 import { BIN_MS, CHANNELS, type Send, type State, useModeKeys, type useServer } from "../server";
 import { Home } from "./Home";
-import { KeyList, Next } from "./parts";
+import { KeyRow, Next, SignalCorner } from "./parts";
 import { usePersistent } from "./persist";
 import { Sentences, type Goal } from "./Sentences";
 import { Training } from "./Training";
@@ -16,10 +18,10 @@ const FIRST_SENTENCES = 10;
 
 export function SimpleApp({ server, onAdvanced }: { server: ReturnType<typeof useServer>; onAdvanced: () => void }) {
   const { state, notices, grid, practice, clearPractice, send } = server;
-  const [stage, setStage] = usePersistent<Stage>("trackpad.stage", "welcome");
+  const [stage, setStage] = usePersistent<Stage | null>("trackpad.stage", null); // null: first visit, not decided yet
   const [goal, setGoal] = usePersistent<Goal | null>("trackpad.intro-goal", null);
   const [trainPending, setTrainPending] = usePersistent("trackpad.intro-train", false);
-  const [heroUp, setHeroUp] = useState(stage !== "welcome");
+  const [heroUp, setHeroUp] = useState(stage !== null && stage !== "welcome");
   const mode = state?.mode ?? "idle";
   useModeKeys(mode, send);
 
@@ -39,20 +41,30 @@ export function SimpleApp({ server, onAdvanced }: { server: ReturnType<typeof us
     setStage(next);
   };
 
+  // A first visit: the intro, unless there's already a trained decoder to use
+  useEffect(() => {
+    if (stage === null && state) {
+      if (state.summary.model.exists) go("home");
+      else setStage("welcome");
+    }
+  }, [stage, state]);
+
   let body: ReactNode;
-  if (stage === "welcome") {
+  if (stage === null) {
+    body = null;
+  } else if (stage === "welcome") {
     body = <Welcome grid={grid} onRise={() => setHeroUp(true)} onNext={() => go("practice-sound")} />;
   } else if (!state) {
     body = <div className="step"><p className="step-hint">Connecting… is <code>server.py</code> running?</p></div>;
   } else if (stage === "practice-sound") {
     body = (
       <Practice key="sound" state={state} send={send} grid={grid} practice={practice} clearPractice={clearPractice}
-        lead="Make the motion for the sound" big="ah" sub="as in “father”" onNext={() => go("practice-space")} />
+        big="ah" ask="Make the motion for this sound, as in “father”." onNext={() => go("practice-space")} />
     );
   } else if (stage === "practice-space") {
     body = (
       <Practice key="space" state={state} send={send} grid={grid} practice={practice} clearPractice={clearPractice}
-        lead="Now make your move for" big="space" sub="the break at the end of every word" onNext={() => go("sentences")} />
+        big="space" ask="Now make your move for the space between words." onNext={() => go("sentences")} />
     );
   } else if (stage === "sentences") {
     body = (
@@ -64,13 +76,14 @@ export function SimpleApp({ server, onAdvanced }: { server: ReturnType<typeof us
         }}
         intro={
           <>
-            <h2 className="step-title">Now let's record for real.</h2>
-            <p className="step-text">
-              I'll show you a sentence. Make the movements, ending each word with your space move, and I'll record them.
-            </p>
-            <KeyList />
+            <h2 className="step-title">Now, whole sentences.</h2>
+            <p className="step-text">I'll show you a sentence. Make the movements, ending each word with your space move.</p>
+            <KeyRow />
           </>
-        } />
+        }
+        actions={state.summary.model.exists && (
+          <button className="btn-big btn-ghost" onClick={() => go("home")}>Use my current decoder</button>
+        )} />
     );
   } else if (stage === "training") {
     body = (
@@ -82,16 +95,14 @@ export function SimpleApp({ server, onAdvanced }: { server: ReturnType<typeof us
   }
 
   const onboarding = stage !== "home";
+  if (stage === null) return <div className="simple" />;
   return (
     <div className="simple">
       {(heroUp || !onboarding) && <div className="topband" />}
-      {onboarding && (
-        <div className={`hero ${heroUp ? "up" : ""}`}>
-          <div className="hero-welcome">welcome to</div>
-          <div className="hero-title">Trackpad</div>
-          <div className="hero-sub">gesture to speech</div>
-        </div>
-      )}
+      <div className={`hero ${heroUp || !onboarding ? "up" : ""} ${onboarding ? "" : "hero-home"}`}>
+        <div className="hero-welcome">Welcome to</div>
+        <div className="hero-title">Trackpad gesture to speech</div>
+      </div>
 
       {state && state.stale_code.length > 0 && (
         <div className="stale">The app's code changed — restart <code>server.py</code> to use it.</div>
@@ -99,10 +110,14 @@ export function SimpleApp({ server, onAdvanced }: { server: ReturnType<typeof us
 
       {body}
 
-      <button className="advanced-link" onClick={onAdvanced}>Advanced settings</button>
-      {onboarding && state?.summary.model.exists && mode === "idle" && (
-        <button className="skip-link" onClick={() => go("home")}>Skip intro</button>
-      )}
+      {state && <SignalCorner state={state} grid={grid} map={mode !== "practice"} />}
+
+      <div className="corner-links">
+        <button onClick={onAdvanced}>Advanced settings</button>
+        {onboarding && state?.summary.model.exists && mode === "idle" && (
+          <button onClick={() => go("home")}>Skip intro</button>
+        )}
+      </div>
 
       <div className="notices" aria-live="polite">
         {notices.map((n) => <div key={n.id} className={`notice ${n.level}`}>{n.text}</div>)}
@@ -130,7 +145,7 @@ function Welcome({ grid, onRise, onNext }: { grid: RefObject<Float32Array>; onRi
       <div className="step">
         <h2 className="step-title">This is your trackpad.</h2>
         <GridCanvas grid={grid} className="pad" />
-        <p className="step-hint">Touch it — the squares light up under your fingers.</p>
+        <p className="step-hint">Touch it to see the squares light up.</p>
       </div>
       <Next show={phase >= 2} onClick={onNext} />
     </>
@@ -172,14 +187,15 @@ function usePlayback(bins: number[][] | null) {
   return { frame, bar, replay: () => setRun((r) => r + 1) };
 }
 
-function Practice({ state, send, grid, practice, clearPractice, lead, big, sub, onNext }: {
+function Practice({ state, send, grid, practice, clearPractice, big, ask, onNext }: {
   state: State; send: Send; grid: RefObject<Float32Array>; practice: number[][] | null; clearPractice: () => void;
-  lead: string; big: string; sub: string; onNext: () => void;
+  big: string; ask: string; onNext: () => void;
 }) {
   const [started, setStarted] = useState(false);
   const playback = usePlayback(started ? practice : null);
   const recording = state.mode === "practice";
   const saw = started && !recording && practice !== null;
+  const seen = saw && practice.length > 0;
 
   useEffect(clearPractice, []); // a playback from an earlier step isn't this one's
 
@@ -189,50 +205,34 @@ function Practice({ state, send, grid, practice, clearPractice, lead, big, sub, 
     send("practice_start");
   };
 
-  let controls: ReactNode;
-  if (recording) {
-    controls = (
-      <p className="recording"><span className="rec-dot live" />Recording — make the motion, then press <kbd>Esc</kbd></p>
-    );
-  } else if (saw && practice.length > 0) {
-    controls = (
-      <>
-        <p className="step-text">Here's what we saw.</p>
-        <div className="btn-row">
-          <button className="btn-big btn-ghost" onClick={playback.replay}>Play again</button>
-          <button className="btn-big btn-ghost" onClick={record}><span className="rec-dot" />Record again</button>
-        </div>
-      </>
-    );
-  } else if (saw) {
-    controls = (
-      <>
-        <p className="step-text">We didn't see any touches. Try again?</p>
-        <button className="btn-big" onClick={record}><span className="rec-dot" />Record</button>
-      </>
-    );
-  } else if (!started) {
-    controls = (
-      <>
-        <button className="btn-big" onClick={record}><span className="rec-dot" />Record</button>
-        <p className="step-hint">Press Record, make the motion on the trackpad, then press <kbd>Esc</kbd>.</p>
-      </>
-    );
-  }
-
   return (
     <>
       <div className="step">
-        <p className="step-lead">{lead}</p>
         <div className="step-big">{big}</div>
-        <p className="step-sub">{sub}</p>
+        <p className="step-text">
+          {recording ? <>Recording. Press <kbd>Esc</kbd> when you're done.</>
+            : seen ? "Here's what we saw."
+            : saw ? "We didn't see any touches. Try again?"
+            : ask}
+        </p>
         <div className="pad-wrap">
           <GridCanvas grid={saw ? playback.frame : grid} className="pad" />
-          <div className={`pad-progress ${saw && practice.length > 0 ? "" : "hidden"}`}><span ref={playback.bar} /></div>
+          <div className={`pad-progress ${seen ? "" : "hidden"}`}><span ref={playback.bar} /></div>
         </div>
-        {controls}
+        <div className="btn-row">
+          {recording ? (
+            <span className="recording"><span className="rec-dot live" />Recording</span>
+          ) : seen ? (
+            <>
+              <button className="btn-big btn-ghost" onClick={playback.replay}>Play again</button>
+              <button className="btn-big btn-ghost" onClick={record}><span className="rec-dot" />Record again</button>
+            </>
+          ) : (
+            <button className="btn-big" onClick={record}><span className="rec-dot" />Record</button>
+          )}
+        </div>
       </div>
-      <Next show={saw && practice.length > 0} onClick={onNext} />
+      <Next show={seen} onClick={onNext} />
     </>
   );
 }

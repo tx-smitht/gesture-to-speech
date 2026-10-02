@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { EpochPoint, Send, State } from "../server";
 
 export const EPOCHS = 200;
+const ERROR_RATE = "The share of sounds it gets wrong in sentences it hasn't studied";
 
 export function Training({ state, history, log, send, pending, clearPending, doneLabel, onDone }: {
   state: State; history: EpochPoint[]; log: string[]; send: Send;
@@ -29,17 +30,12 @@ export function Training({ state, history, log, send, pending, clearPending, don
   if (training.running || waiting) {
     return (
       <div className="step">
-        <h2 className="step-title">Teaching the decoder your moves</h2>
-        <p className="step-text">
-          A small neural network is studying your sentences over and over, learning which touches mean which sound.
-          This takes a minute or two.
-        </p>
+        <h2 className="step-title">Training your decoder</h2>
+        <p className="step-text">It's learning which of your touches mean which sound. This takes a minute or two.</p>
         <div className="meter"><span style={{ width: `${(100 * (last?.epoch ?? 0)) / Math.max(1, training.epochs)}%` }} /></div>
-        <div className="stat">
-          <p className="step-lead">Current error rate</p>
-          <div className="stat-big">{last ? `${Math.round(last.per)}%` : "—"}</div>
-          <p className="step-hint">{last ? "the share of sounds it gets wrong in sentences it hasn't studied" : "getting ready…"}</p>
-        </div>
+        <p className="step-hint" title={ERROR_RATE}>
+          {last ? <>Current error rate: <span className="num">{Math.round(last.per)}%</span></> : "Getting ready…"}
+        </p>
       </div>
     );
   }
@@ -60,15 +56,9 @@ export function Training({ state, history, log, send, pending, clearPending, don
   return (
     <div className="step">
       <h2 className="step-title">Your decoder is ready.</h2>
-      <div className="stat">
-        <p className="step-lead">Error rate</p>
-        <div className="stat-big">{Math.round(per)}%</div>
-        <p className="step-hint">the share of sounds it gets wrong in sentences it hasn't studied</p>
-      </div>
-      <p className="step-text">
-        {per < 20 ? "That's a strong start."
-          : per < 50 ? "A decent start. Recording more sentences will make it better."
-          : "Still rough. It learns from more examples — record more sentences, then train again."}
+      <p className="step-text" title={ERROR_RATE}>
+        Error rate: <span className="num">{Math.round(per)}%</span>.{" "}
+        {per < 20 ? "That's a strong start." : "Recording more sentences will improve it."}
       </p>
       <button className="btn-big" onClick={onDone}>{doneLabel} <span className="next-arrow">→</span></button>
     </div>

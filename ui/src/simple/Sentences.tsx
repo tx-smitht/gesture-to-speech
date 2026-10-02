@@ -1,8 +1,9 @@
 // Recording in earnest: a sentence at a time, the prompt updating in place. No playback here -- that was only
 // for the practice moves. The server does the work (the same Copy Task as the advanced Record tab).
 import { useEffect, useState, type ReactNode } from "react";
-import { Key, Prompt } from "../components/bits";
+import { Prompt } from "../components/bits";
 import type { Send, State } from "../server";
+import { KeyRow } from "./parts";
 
 /** A batch of sentences: done once the recorded total reaches `goal` (it was `start` when the batch began).
  * Counting from the saved total lets a batch survive stopping with Esc and picking it up again. */
@@ -43,16 +44,16 @@ export function Sentences({ state, send, goal, setGoal, count, intro, actions, o
   if (recording) {
     const done = n - (rec.n - rec.saved); // sentences finished in this batch
     return (
-      <div className="step step-wide">
-        <p className="step-lead">Sentence {Math.min(done + 1, n)} of {n}</p>
-        <div className="meter meter-thin"><span style={{ width: `${(100 * done) / n}%` }} /></div>
-        <Prompt tokens={rec.prompt} words={rec.words} arpabet={state.arpabet} wordBreak={state.word_break} />
-        <div className="keys-quiet">
-          <Key k="Enter">done</Key>
-          <Key k="R">redo</Key>
-          <Key k="Esc">stop</Key>
+      <>
+        <div className="step step-wide">
+          <div className="count">
+            <div className="meter meter-thin"><span style={{ width: `${(100 * done) / n}%` }} /></div>
+            <span>{Math.min(done + 1, n)} of {n}</span>
+          </div>
+          <Prompt tokens={rec.prompt} words={rec.words} arpabet={state.arpabet} wordBreak={state.word_break} />
         </div>
-      </div>
+        <KeyRow className="keys-bottom" />
+      </>
     );
   }
   if (waiting || complete) return <div className="step" />;
@@ -75,7 +76,9 @@ export function Sentences({ state, send, goal, setGoal, count, intro, actions, o
   return (
     <div className="step">
       <h2 className="step-title">Paused</h2>
-      <p className="step-text">{saved} of {n} sentences saved.</p>
+      <p className="step-text">
+        {saved} of {n} sentences saved.{total < 10 && " The decoder needs at least 10 to learn from."}
+      </p>
       <div className="btn-row">
         <button className="btn-big" onClick={() => record(n - saved)}>Keep going</button>
         {total >= 10 && saved > 0 && (
@@ -84,7 +87,6 @@ export function Sentences({ state, send, goal, setGoal, count, intro, actions, o
           </button>
         )}
       </div>
-      {total < 10 && <p className="step-hint">The decoder needs at least 10 sentences to learn from.</p>}
     </div>
   );
 }

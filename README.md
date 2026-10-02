@@ -41,8 +41,15 @@ It opens in a **simple, guided view** (black or white, following your system's d
 through it one step at a time: a welcome, "this is your trackpad" (the live grid), practising one sound and the
 space move (each played back to you: "here's what we saw"; practice isn't saved), recording 10 sentences, then
 training (200 epochs, showing only progress and the current error rate). After that there are two tabs: **Record
-more data** and **Help me speak** (just the decoded words in the middle of the screen, spoken aloud). Add `?intro`
-to the address to replay the intro.
+more data** and **Help me speak** (just the decoded words in the middle of the screen, spoken aloud). While
+recording or decoding, a small live map in the corner shows the signal arriving, with the trackpad-lock status. If a
+decoder is already trained, a first visit goes straight to the two tabs; add `?intro` to the address to see the intro
+anyway.
+
+**Decoders.** Each decoder is a file in `models/`; the Train tab's *Decoder* menu picks which one recording, training
+and decoding use (remembered in `models/decoders.json`). *Start over…* makes a new, untrained decoder and runs the
+intro from the beginning, as if you'd never had one; by default it learns only from recordings made from then on.
+Nothing is deleted, so you can switch back any time.
 
 **Advanced settings** (bottom left) switches to the full app, with every control and chart:
 

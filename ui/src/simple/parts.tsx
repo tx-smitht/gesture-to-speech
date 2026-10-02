@@ -1,5 +1,8 @@
 // Small pieces shared by the simple screens.
-import { useEffect } from "react";
+import { useEffect, type RefObject } from "react";
+import { Key } from "../components/bits";
+import { GridCanvas } from "../components/ElectrodeGrid";
+import type { State } from "../server";
 
 /** "Next →", fading in slowly once it's time to move on. The right arrow key presses it too. */
 export function Next({ show, onClick, label = "Next" }: { show: boolean; onClick: () => void; label?: string }) {
@@ -18,12 +21,32 @@ export function Next({ show, onClick, label = "Next" }: { show: boolean; onClick
   );
 }
 
-export function KeyList() {
+/** The keys for recording sentences, in one quiet row. */
+export function KeyRow({ className = "" }: { className?: string }) {
   return (
-    <ul className="keylist">
-      <li><kbd>Enter</kbd> when you finish a sentence</li>
-      <li><kbd>R</kbd> to redo it</li>
-      <li><kbd>Esc</kbd> to stop</li>
-    </ul>
+    <div className={`keys-quiet ${className}`}>
+      <Key k="Enter">Next sentence</Key>
+      <Key k="R">Redo</Key>
+      <Key k="Esc">Stop</Key>
+    </div>
+  );
+}
+
+/** Bottom right while the trackpad is in use: a small live map (proof the signal is coming in) and the lock state. */
+export function SignalCorner({ state, grid, map }: { state: State; grid: RefObject<Float32Array>; map: boolean }) {
+  if (state.mode === "idle") return null;
+  const { guard } = state;
+  const problem = !guard.available && guard.error && guard.error !== "turned off" ? guard.error : null;
+  return (
+    <div className="corner-signal">
+      {map && <GridCanvas grid={grid} className="corner-pad" />}
+      <span className={`corner-status ${guard.locked ? "on" : ""}`}>
+        {guard.locked ? "Trackpad locked" : guard.available ? "Locking…"
+          : guard.error === "turned off" ? "Trackpad lock off" : "Trackpad not locked"}
+      </span>
+      {problem && (
+        <span className="corner-why">{problem[0].toUpperCase() + problem.slice(1).replace(" -- ", ": ")}</span>
+      )}
+    </div>
   );
 }

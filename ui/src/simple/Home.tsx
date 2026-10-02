@@ -5,7 +5,7 @@ import { Key } from "../components/bits";
 import type { LiveFrame, Send, State, useServer } from "../server";
 import { usePersistent } from "./persist";
 import { Sentences, type Goal } from "./Sentences";
-import { KeyList } from "./parts";
+import { KeyRow } from "./parts";
 import { Training } from "./Training";
 
 type HomeTab = "record" | "speak";
@@ -23,7 +23,6 @@ export function Home({ server }: { server: ReturnType<typeof useServer> }) {
 
   return (
     <>
-      <div className="brand-small">Trackpad</div>
       <nav className="home-tabs" aria-label="Sections">
         <button className={tab === "record" ? "on" : ""} disabled={mode !== "idle"} onClick={() => setTab("record")}>
           Record more data
@@ -75,19 +74,15 @@ function RecordMore({ server, state, onSpeak }: {
       intro={
         <>
           <h2 className="step-title">Record more sentences</h2>
-          <p className="step-text">Every sentence you record helps the decoder understand your moves.</p>
-          <p className="step-hint">
-            {summary.total_trials} recorded so far
-            {unlearned > 0 && ` · ${unlearned} the decoder hasn't learned from yet`}
-          </p>
-          <KeyList />
+          <p className="step-text">More sentences make the decoder better. You've recorded {summary.total_trials} so far.</p>
+          <KeyRow />
         </>
       }
       actions={unlearned > 0 && summary.total_trials >= 10 && (
         <button className="btn-big btn-ghost" onClick={() => {
           setTrainPending(true);
           setTraining(true);
-        }}>Train the decoder</button>
+        }}>Train on {unlearned} new {unlearned === 1 ? "sentence" : "sentences"}</button>
       )} />
   );
 }
@@ -121,7 +116,6 @@ function Speak({ state, live, send }: { state: State; live: LiveFrame | null; se
         <h2 className="step-title">Make your moves. I'll say the words.</h2>
         <button className="btn-big" disabled={state.mode !== "idle"}
           onClick={() => send("live_start", { speak: true, keep_words: true, readback: false })}>Start</button>
-        <p className="step-hint">The pointer locks while I listen. Press <kbd>Esc</kbd> to stop.</p>
         {words.length > 0 && <p className="speak-last">{words.slice(-12).map(word)}</p>}
       </div>
     );
@@ -133,7 +127,7 @@ function Speak({ state, live, send }: { state: State; live: LiveFrame | null; se
     <>
       <div className="speak">
         {words.length === 0 && current.length === 0 ? (
-          <p className="speak-idle">listening…</p>
+          <p className="speak-idle">Listening…</p>
         ) : (
           <div className="speak-words">
             {words.slice(offset).map((w, k) => word(w, offset + k))}
@@ -142,8 +136,8 @@ function Speak({ state, live, send }: { state: State; live: LiveFrame | null; se
         )}
       </div>
       <div className="keys-quiet keys-bottom">
-        <Key k="Esc">stop</Key>
-        <Key k="C">clear</Key>
+        <Key k="Esc">Stop</Key>
+        <Key k="C">Clear</Key>
       </div>
     </>
   );
