@@ -5,8 +5,8 @@
     python server.py --no-browser --port 9000
 
 The trackpad sensor stays open the whole time, so the browser always shows the live electrode grid. Only one mode
-runs at a time: idle, recording (the Copy Task) or live (decoding). In recording and live mode the pointer is
-locked via bin/trackpad-guard; Esc always unlocks it.
+runs at a time: idle, recording (the Copy Task), practice (one move, played back to you -- the guided intro) or live
+(decoding). In every mode but idle the pointer is locked via bin/trackpad-guard; Esc always unlocks it.
 """
 
 import argparse
@@ -42,6 +42,8 @@ EPOCH_LINE = re.compile(r"epoch\s+(\d+)\s+loss\s+([\d.]+)\s+held-out phoneme err
                         r"\s+\(with 2 s extra silence:\s+([\d.]+)%\)")
 BEST_LINE = re.compile(r"Best model: ([\d.]+)% phoneme error rate")
 SESSION_LINE = re.compile(r"(session_[\w-]+)\.jsonl:\s+([\d.]+)%\s+\((\d+) trials")
+PRACTICE_MAX_BINS = 3000  # a practice move is kept for at most its last 60 s
+PRACTICE_MARGIN_BINS = 15  # playback keeps 0.3 s of stillness before the first touch and after the last
 
 
 class ReplayTouches:
@@ -83,6 +85,7 @@ class App:
         self.tick = 0          # number of the current 20 ms bin, so the browser can line events up with the signal
         self.rec = None        # recording state
         self.live = None       # live-decoding state
+        self.practice = None   # practice state: the activity map of every bin since practice started
         self.train = {"running": False, "epochs": 0, "history": [], "result": None, "log": []}
         self._train_proc = None
         self._model_cache = (None, None)
@@ -172,6 +175,9 @@ class App:
             self.tick += 1
             if self.rec is not None:
                 self.rec["frames"] += frames
+            if self.practice is not None:
+                self.practice.append(x)
+                del self.practice[:-PRACTICE_MAX_BINS]
             if self.live is not None:
                 features = self.live["features"]  # the model gets the input it was trained on
                 await self._live_step(x if features == "basic" else bin_vector(frames, self.rt.pad, features))
@@ -251,6 +257,27 @@ class App:
         await self.notice(f"Removed sentence {len(rec['saved']) + 1} -- do it again")
         await self.push_state()
 
+    # ------------------------------------------------------------------ practice (the guided intro)
+
+    async def practice_start(self):
+        """Lock the pointer and keep what the grid shows until Esc. Nothing is saved: practice moves only teach how
+        recording works, and on stop the browser gets them back to play to you ("here's what we saw")."""
+        if self.mode != "idle":
+            return
+        self.practice = []
+        self.mode = "practice"
+        self.guard.block()
+        await self.push_state()
+
+    async def _practice_playback(self, bins):
+        """Send the practice move's bins, trimmed to the touches plus a short margin ([] if there were none)."""
+        touched = [i for i, x in enumerate(bins) if x.any()]
+        if touched:
+            bins = bins[max(0, touched[0] - PRACTICE_MARGIN_BINS):touched[-1] + 1 + PRACTICE_MARGIN_BINS]
+        else:
+            bins = []
+        await self.send({"type": "practice", "bins": [[round(float(v), 2) for v in x] for x in bins]})
+
     # ------------------------------------------------------------------ live decoding
 
     def _model(self):
@@ -328,9 +355,12 @@ class App:
                 if self.live["speak"]:
                     speak(word)
         was_recording = self.rec is not None
-        self.mode, self.rec, self.live = "idle", None, None
+        practice = self.practice
+        self.mode, self.rec, self.live, self.practice = "idle", None, None, None
         if was_recording:
             self.summary = self._summarize()
+        if practice is not None:  # before the state, so the browser has the playback when it sees "idle"
+            await self._practice_playback(practice)
         await self.push_state()
 
     # ------------------------------------------------------------------ training
@@ -404,6 +434,8 @@ class App:
             await self.record_undo()
         elif cmd == "stop":
             await self.stop()
+        elif cmd == "practice_start":
+            await self.practice_start()
         elif cmd == "live_start":
             await self.live_start(bool(msg.get("speak")), bool(msg.get("keep_words")), bool(msg.get("readback")))
         elif cmd == "live_clear":

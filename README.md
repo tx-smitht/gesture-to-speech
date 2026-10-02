@@ -37,6 +37,15 @@ which is gitignored too.
 uv run server.py                 # opens http://localhost:8765
 ```
 
+It opens in a **simple, guided view** (black or white, following your system's dark mode). A first visit walks
+through it one step at a time: a welcome, "this is your trackpad" (the live grid), practising one sound and the
+space move (each played back to you: "here's what we saw"; practice isn't saved), recording 10 sentences, then
+training (200 epochs, showing only progress and the current error rate). After that there are two tabs: **Record
+more data** and **Help me speak** (just the decoded words in the middle of the screen, spoken aloud). Add `?intro`
+to the address to replay the intro.
+
+**Advanced settings** (bottom left) switches to the full app, with every control and chart:
+
 | Tab | What it does |
 |---|---|
 | **Record** | The calibration Copy Task. Keys: Enter = save · R = redo · ⌫ = undo last saved · Esc = finish |

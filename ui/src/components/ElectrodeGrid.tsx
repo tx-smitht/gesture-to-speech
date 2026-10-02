@@ -2,10 +2,11 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { GRID_COLS, GRID_ROWS } from "../server";
 
-const BLUE = [31, 91, 255];
 const AFTERGLOW = 0.93; // per frame: a tap lasts ~100 ms, so let it fade over ~0.5 s instead of flashing
 
-export function ElectrodeGrid({ grid, active }: { grid: RefObject<Float32Array>; active: boolean }) {
+/** Just the grid, drawn from whatever values the ref holds (the live signal, or a playback).
+ * Colours come from the CSS variables --cell and --cell-on (an "r, g, b" triple), so it follows the page's theme. */
+export function GridCanvas({ grid, className = "grid-canvas" }: { grid: RefObject<Float32Array>; className?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -23,6 +24,9 @@ export function ElectrodeGrid({ grid, active }: { grid: RefObject<Float32Array>;
           c.width = w * dpr;
           c.height = h * dpr;
         }
+        const style = getComputedStyle(c);
+        const cell = style.getPropertyValue("--cell").trim() || "#f2f2f2";
+        const on = style.getPropertyValue("--cell-on").trim() || "31, 91, 255";
         const ctx = c.getContext("2d")!;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, w, h);
@@ -34,10 +38,10 @@ export function ElectrodeGrid({ grid, active }: { grid: RefObject<Float32Array>;
             const v = Math.min(1, shown[row * GRID_COLS + col] / 1.2);
             const x = gap + col * (cw + gap);
             const y = h - (gap + (row + 1) * (ch + gap)) + gap; // row 0 is the bottom edge of the trackpad
-            ctx.fillStyle = "#f2f2f2";
+            ctx.fillStyle = cell;
             ctx.fillRect(x, y, cw, ch);
             if (v > 0.02) {
-              ctx.fillStyle = `rgba(${BLUE.join(",")},${0.15 + 0.85 * v})`;
+              ctx.fillStyle = `rgba(${on},${0.15 + 0.85 * v})`;
               ctx.fillRect(x, y, cw, ch);
             }
           }
@@ -49,13 +53,17 @@ export function ElectrodeGrid({ grid, active }: { grid: RefObject<Float32Array>;
     return () => cancelAnimationFrame(frame);
   }, [grid]);
 
+  return <canvas ref={canvas} className={className} />;
+}
+
+export function ElectrodeGrid({ grid, active }: { grid: RefObject<Float32Array>; active: boolean }) {
   return (
     <div className="panel">
       <div className="panel-head">
         <span className="label">Electrode array</span>
         <span className={`dot ${active ? "dot-on" : ""}`} />
       </div>
-      <canvas ref={canvas} className="grid-canvas" />
+      <GridCanvas grid={grid} />
       <p className="caption">160 channels · 20 ms bins · each cell ≈ 10 mm of trackpad</p>
     </div>
   );

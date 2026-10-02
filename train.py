@@ -137,6 +137,11 @@ def main():
             test_by_session.setdefault(t["session"], []).append(item)
         else:
             train.append(item)
+    if not test_by_session and not (args.fold or args.test_session) and len(train) > 1:
+        # A first session of ~10 trials can draw no test trials from the fixed coin flips: test on the last one
+        item, t = train.pop(), trials[-1]
+        test_by_session[t["session"]] = [item]
+        print("Too few trials for the usual held-out split: testing on the last trial only\n")
     test = [item for items in test_by_session.values() for item in items]
     if not train or not test:
         raise SystemExit(f"Nothing to {'train' if not train else 'test'} on -- check --test-session.")

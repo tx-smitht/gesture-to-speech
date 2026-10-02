@@ -196,3 +196,6 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5p
 
 .banner-strong { background: var(--blue-soft); color: var(--ink); border-bottom-color: #c9d7ff; }
 .chip-dark { background: var(--ink); color: #fff; border-color: var(--ink); }
+.simple-link { background: none; border: 1px solid #3a3a3c; border-radius: 999px; padding: 4px 12px; color: #d1d1d6;
+  font-size: 13px; cursor: pointer; }
+.simple-link:hover { color: #fff; border-color: #8e8e93; }
