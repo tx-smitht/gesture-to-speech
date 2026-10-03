@@ -1,7 +1,7 @@
 // Train the decoder on everything recorded, watching the held-out error rate fall.
 import { useEffect, useRef, useState } from "react";
 import { LineChart } from "../components/bits";
-import type { EpochPoint, State, Send } from "../server";
+import type { DecoderInfo, EpochPoint, State, Send } from "../server";
 
 const pct = (v: number) => `${v.toFixed(1)}%`;
 
@@ -12,13 +12,29 @@ const FEATURE_INFO: Record<string, string> = {
   shape: "Size and angle together (4 maps). Needs the most data.",
 };
 
-export function TrainView({ state, history, log, send }: {
-  state: State; history: EpochPoint[]; log: string[]; send: Send;
+/** "decoder-20261002-101500 · 28.4% error · 60 sentences" */
+function decoderLabel(d: DecoderInfo) {
+  const name = d.name.replace(/\.pt$/, "");
+  if (!d.exists) return `${name} · not trained yet`;
+  return `${name} · ${d.held_out_per != null ? `${pct(d.held_out_per * 100)} error` : "no score"} · ${d.n_trials ?? "?"} sentences`;
+}
+
+/** "session_20261002-101500" -> a readable date */
+function sinceLabel(since: string) {
+  const m = since.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toLocaleString() : since;
+}
+
+export function TrainView({ state, history, log, send, onStartOver }: {
+  state: State; history: EpochPoint[]; log: string[]; send: Send; onStartOver: (freshRecordings: boolean) => void;
 }) {
   const [epochs, setEpochs] = useState(300);
   const [features, setFeatures] = useState("basic");
+  const [confirming, setConfirming] = useState(false);
+  const [fresh, setFresh] = useState(true);
   const { training, summary } = state;
   const model = summary.model;
+  const busy = training.running || state.mode !== "idle";
   const logBox = useRef<HTMLPreElement>(null);
   const last = history[history.length - 1];
 
@@ -35,6 +51,34 @@ export function TrainView({ state, history, log, send }: {
             <span className="caption">trained {new Date(model.trained_at).toLocaleString()}</span>
           )}
         </div>
+        <div className="row">
+          <label className="field">
+            <span className="caption">Decoder</span>
+            <select value={model.name} disabled={busy} onChange={(e) => send("decoder_select", { name: e.target.value })}>
+              {(summary.decoders ?? []).map((d) => (
+                <option key={d.name} value={d.name} disabled={!d.exists && d.name !== model.name}>{decoderLabel(d)}</option>
+              ))}
+            </select>
+          </label>
+          <button className="btn btn-small" disabled={busy} onClick={() => setConfirming(true)}>Start over…</button>
+        </div>
+        {confirming && (
+          <div className="start-over">
+            <p className="lede">
+              Make a new, untrained decoder and go through the intro from the beginning, as if you'd never had one.
+              Nothing is deleted: your decoders and recordings stay on disk, and you can switch back here any time.
+            </p>
+            <label className="toggle">
+              <input type="checkbox" checked={fresh} onChange={(e) => setFresh(e.target.checked)} />
+              Learn only from recordings made from now on (leave out the {summary.total_trials} recorded so far)
+            </label>
+            <div className="row">
+              <button className="btn btn-primary" onClick={() => onStartOver(fresh)}>Start over</button>
+              <button className="btn" onClick={() => setConfirming(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {model.since && <p className="caption since-note">Learns only from recordings made since {sinceLabel(model.since)}.</p>}
         {model.exists ? (
           <div className="model-summary">
             <div>

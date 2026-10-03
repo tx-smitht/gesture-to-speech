@@ -5,12 +5,13 @@
     python server.py --no-browser --port 9000
 
 The trackpad sensor stays open the whole time, so the browser always shows the live electrode grid. Only one mode
-runs at a time: idle, recording (the Copy Task) or live (decoding). In recording and live mode the pointer is
-locked via bin/trackpad-guard; Esc always unlocks it.
+runs at a time: idle, recording (the Copy Task), practice (one move, played back to you -- the guided intro) or live
+(decoding). In every mode but idle the pointer is locked via bin/trackpad-guard; Esc always unlocks it.
 """
 
 import argparse
 import asyncio
+import glob
 import json
 import os
 import re
@@ -42,6 +43,11 @@ EPOCH_LINE = re.compile(r"epoch\s+(\d+)\s+loss\s+([\d.]+)\s+held-out phoneme err
                         r"\s+\(with 2 s extra silence:\s+([\d.]+)%\)")
 BEST_LINE = re.compile(r"Best model: ([\d.]+)% phoneme error rate")
 SESSION_LINE = re.compile(r"(session_[\w-]+)\.jsonl:\s+([\d.]+)%\s+\((\d+) trials")
+# In the models folder: which decoder is in use, and for each decoder made by "start over", the first session it
+# learns from ("since"). A decoder without one learns from every recording in data/.
+DECODERS_FILE = "decoders.json"
+PRACTICE_MAX_BINS = 3000  # a practice move is kept for at most its last 60 s
+PRACTICE_MARGIN_BINS = 15  # playback keeps 0.3 s of stillness before the first touch and after the last
 
 
 class ReplayTouches:
@@ -73,7 +79,14 @@ class ReplayTouches:
 
 class App:
     def __init__(self, data_dir, model_path, replay=None, lock=True):
-        self.data_dir, self.model_path = data_dir, model_path
+        self.data_dir = data_dir
+        self.models_dir = os.path.dirname(os.path.abspath(model_path))
+        self.decoders = {"active": os.path.basename(model_path), "since": {}}
+        try:
+            with open(os.path.join(self.models_dir, DECODERS_FILE)) as f:
+                self.decoders.update(json.load(f))
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
         self.clients = set()
         self.loop = None
         self.rt = ReplayTouches(replay) if replay else RawTouches().__enter__()
@@ -83,22 +96,59 @@ class App:
         self.tick = 0          # number of the current 20 ms bin, so the browser can line events up with the signal
         self.rec = None        # recording state
         self.live = None       # live-decoding state
+        self.practice = None   # practice state: the activity map of every bin since practice started
         self.train = {"running": False, "epochs": 0, "history": [], "result": None, "log": []}
         self._train_proc = None
         self._model_cache = (None, None)
         self.summary = self._summarize()
 
+    # ------------------------------------------------------------------ which decoder, and which recordings it uses
+
+    @property
+    def model_path(self):
+        return os.path.join(self.models_dir, self.decoders["active"])
+
+    def _since(self):
+        return self.decoders["since"].get(self.decoders["active"])
+
+    def _session_files(self):
+        """The recordings the active decoder learns from: all of data/, or those since it was started over."""
+        files = sorted(glob.glob(os.path.join(self.data_dir, "*.jsonl")))
+        since = self._since()
+        return [f for f in files if not since or os.path.basename(f) >= since]
+
+    def _save_decoders(self):
+        os.makedirs(self.models_dir, exist_ok=True)
+        with open(os.path.join(self.models_dir, DECODERS_FILE), "w") as f:
+            json.dump(self.decoders, f, indent=2)
+
+    def _decoder_info(self, path):
+        info = {"name": os.path.basename(path), "exists": os.path.exists(path),
+                "since": self.decoders["since"].get(os.path.basename(path))}
+        if info["exists"]:
+            c = torch.load(path, weights_only=False)["config"]
+            info.update(held_out_per=c.get("held_out_per"), n_trials=(c.get("n_train") or 0) + (c.get("n_test") or 0),
+                        trained_at=datetime.fromtimestamp(os.path.getmtime(path)).isoformat())
+        return info
+
+    def _decoder_list(self):
+        paths = sorted(glob.glob(os.path.join(self.models_dir, "*.pt")))
+        if self.model_path not in paths:  # just started over: not trained yet
+            paths.append(self.model_path)
+        return [self._decoder_info(p) for p in paths]
+
     # ------------------------------------------------------------------ state sent to the browser
 
     def _summarize(self):
-        trials = load_trials(self.data_dir) if os.path.isdir(self.data_dir) else []
+        files = self._session_files()
+        trials = load_trials(*files) if files else []
         counts, sessions = {}, {}
         for t in trials:
             for tok in t["prompt"]:
                 counts[tok] = counts.get(tok, 0) + 1
             sessions[t["session"]] = sessions.get(t["session"], 0) + 1
         inventory = load_inventory()
-        model = {"exists": os.path.exists(self.model_path)}
+        model = {"exists": os.path.exists(self.model_path), "name": self.decoders["active"], "since": self._since()}
         if model["exists"]:
             ck = torch.load(self.model_path, weights_only=False)
             c = ck["config"]
@@ -118,7 +168,8 @@ class App:
         except SystemExit:
             words = None
         return {"inventory": inventory, "counts": counts, "total_trials": len(trials), "words": words,
-                "sessions": [{"name": k, "trials": v} for k, v in sorted(sessions.items())], "model": model}
+                "sessions": [{"name": k, "trials": v} for k, v in sorted(sessions.items())], "model": model,
+                "decoders": self._decoder_list()}
 
     def state(self):
         rec = None
@@ -172,6 +223,9 @@ class App:
             self.tick += 1
             if self.rec is not None:
                 self.rec["frames"] += frames
+            if self.practice is not None:
+                self.practice.append(x)
+                del self.practice[:-PRACTICE_MAX_BINS]
             if self.live is not None:
                 features = self.live["features"]  # the model gets the input it was trained on
                 await self._live_step(x if features == "basic" else bin_vector(frames, self.rt.pad, features))
@@ -251,12 +305,33 @@ class App:
         await self.notice(f"Removed sentence {len(rec['saved']) + 1} -- do it again")
         await self.push_state()
 
+    # ------------------------------------------------------------------ practice (the guided intro)
+
+    async def practice_start(self):
+        """Lock the pointer and keep what the grid shows until Esc. Nothing is saved: practice moves only teach how
+        recording works, and on stop the browser gets them back to play to you ("here's what we saw")."""
+        if self.mode != "idle":
+            return
+        self.practice = []
+        self.mode = "practice"
+        self.guard.block()
+        await self.push_state()
+
+    async def _practice_playback(self, bins):
+        """Send the practice move's bins, trimmed to the touches plus a short margin ([] if there were none)."""
+        touched = [i for i, x in enumerate(bins) if x.any()]
+        if touched:
+            bins = bins[max(0, touched[0] - PRACTICE_MARGIN_BINS):touched[-1] + 1 + PRACTICE_MARGIN_BINS]
+        else:
+            bins = []
+        await self.send({"type": "practice", "bins": [[round(float(v), 2) for v in x] for x in bins]})
+
     # ------------------------------------------------------------------ live decoding
 
     def _model(self):
-        mtime = os.path.getmtime(self.model_path)
-        if self._model_cache[0] != mtime:
-            self._model_cache = (mtime, load_model(self.model_path))
+        key = (self.model_path, os.path.getmtime(self.model_path))
+        if self._model_cache[0] != key:
+            self._model_cache = (key, load_model(self.model_path))
         return self._model_cache[1]
 
     async def live_start(self, speak_words, keep_words, readback=False):
@@ -328,9 +403,12 @@ class App:
                 if self.live["speak"]:
                     speak(word)
         was_recording = self.rec is not None
-        self.mode, self.rec, self.live = "idle", None, None
+        practice = self.practice
+        self.mode, self.rec, self.live, self.practice = "idle", None, None, None
         if was_recording:
             self.summary = self._summarize()
+        if practice is not None:  # before the state, so the browser has the playback when it sees "idle"
+            await self._practice_playback(practice)
         await self.push_state()
 
     # ------------------------------------------------------------------ training
@@ -340,10 +418,14 @@ class App:
             return
         epochs = max(5, int(epochs))
         features = features if features in FEATURE_SETS else "basic"
+        data = [self.data_dir] if not self._since() else self._session_files()
+        if not data:
+            await self.notice("No recordings for this decoder yet", "warn")
+            return
         self.train = {"running": True, "epochs": epochs, "history": [], "result": None, "log": []}
         await self.push_state()
         self._train_proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-u", os.path.join(HERE, "train.py"), self.data_dir, "--epochs", str(epochs),
+            sys.executable, "-u", os.path.join(HERE, "train.py"), *data, "--epochs", str(epochs),
             "--features", features,
             "--out", self.model_path, cwd=HERE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
         asyncio.create_task(self._train_watch(self._train_proc))
@@ -375,6 +457,35 @@ class App:
         if self._train_proc and self._train_proc.returncode is None:
             self._train_proc.terminate()
 
+    # ------------------------------------------------------------------ choosing a decoder
+
+    async def decoder_select(self, name):
+        if self.mode != "idle" or self.train["running"]:
+            await self.notice("Stop recording, decoding or training first", "warn")
+            return
+        if os.path.basename(name) != name or not os.path.exists(os.path.join(self.models_dir, name)):
+            return
+        self.decoders["active"] = name
+        self._save_decoders()
+        self.summary = self._summarize()
+        await self.push_state()
+
+    async def decoder_new(self, fresh_recordings):
+        """Start over: a new, untrained decoder becomes the active one (the others stay on disk). With
+        fresh_recordings it only learns from sessions recorded from now on -- as if you had never recorded."""
+        if self.mode != "idle" or self.train["running"]:
+            await self.notice("Stop recording, decoding or training first", "warn")
+            return
+        now = datetime.now()
+        name = f"decoder-{now:%Y%m%d-%H%M%S}.pt"
+        self.decoders["active"] = name
+        if fresh_recordings:
+            self.decoders["since"][name] = f"session_{now:%Y%m%d-%H%M%S}"
+        self._save_decoders()
+        self.train = {"running": False, "epochs": 0, "history": [], "result": None, "log": []}
+        self.summary = self._summarize()
+        await self.push_state()
+
     # ------------------------------------------------------------------ sound inventory
 
     async def set_inventory(self, phonemes):
@@ -404,6 +515,8 @@ class App:
             await self.record_undo()
         elif cmd == "stop":
             await self.stop()
+        elif cmd == "practice_start":
+            await self.practice_start()
         elif cmd == "live_start":
             await self.live_start(bool(msg.get("speak")), bool(msg.get("keep_words")), bool(msg.get("readback")))
         elif cmd == "live_clear":
@@ -412,6 +525,10 @@ class App:
             await self.train_start(msg.get("epochs", 200), msg.get("features", "basic"))
         elif cmd == "train_stop":
             await self.train_stop()
+        elif cmd == "decoder_select":
+            await self.decoder_select(str(msg.get("name", "")))
+        elif cmd == "decoder_new":
+            await self.decoder_new(bool(msg.get("fresh_recordings", True)))
         elif cmd == "inventory_set":
             await self.set_inventory(msg.get("phonemes", []))
         elif cmd == "refresh":

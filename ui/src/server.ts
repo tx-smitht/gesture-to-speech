@@ -1,11 +1,13 @@
 // The WebSocket connection to server.py and the shapes of everything it sends.
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type Mode = "idle" | "recording" | "live";
+export type Mode = "idle" | "recording" | "practice" | "live";
 export type PromptKind = "sounds" | "words" | "mix";
 
 export interface ModelInfo {
   exists: boolean;
+  name: string; // file in models/
+  since: string | null; // started over: learns only from sessions from this one on (null: all recordings)
   vocab?: string[];
   features?: string; // which input maps it was trained on
   held_out_per?: number | null; // fraction, 0.138 = 13.8%
@@ -16,6 +18,16 @@ export interface ModelInfo {
   missing?: string[]; // sounds in your language the model can't output yet
 }
 
+/** A decoder on disk (models/*.pt), for choosing which one to use. */
+export interface DecoderInfo {
+  name: string;
+  exists: boolean; // false: just started over, not trained yet
+  since: string | null;
+  held_out_per?: number | null;
+  n_trials?: number;
+  trained_at?: string;
+}
+
 export interface Summary {
   inventory: string[];
   counts: Record<string, number>;
@@ -24,6 +36,7 @@ export interface Summary {
   words: { word: string; also: string[]; sounds: string[] }[] | null;
   sessions: { name: string; trials: number }[];
   model: ModelInfo;
+  decoders: DecoderInfo[];
 }
 
 export interface EpochPoint {
@@ -113,6 +126,8 @@ export function useServer() {
   const [history, setHistory] = useState<EpochPoint[]>([]);
   const [log, setLog] = useState<string[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
+  // The last practice move, as the activity map of each 20 ms bin ([] if it had no touches); null until one ends
+  const [practice, setPractice] = useState<number[][] | null>(null);
   // The signal arrives 50 times a second: kept in refs and drawn straight to canvases, not React state
   const grid = useRef<Float32Array>(new Float32Array(CHANNELS));
   const signal = useRef(new SignalBuffer());
@@ -154,6 +169,9 @@ export function useServer() {
             }
             if (markers.current.length > 400) markers.current = markers.current.slice(-300);
             break;
+          case "practice":
+            setPractice(msg.bins);
+            break;
           case "train_line":
             setLog((prev) => [...prev, msg.line].slice(-400));
             if (msg.epoch) setHistory((prev) => [...prev, msg.epoch]);
@@ -180,5 +198,28 @@ export function useServer() {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify({ cmd, ...extra }));
   }, []);
 
-  return { state, connected, live, history, log, notices, grid, signal, markers, send };
+  const clearPractice = useCallback(() => setPractice(null), []);
+
+  return { state, connected, live, history, log, notices, grid, signal, markers, practice, clearPractice, send };
+}
+
+/** While recording, practising or decoding the pointer is locked, so everything is on the keyboard. */
+export function useModeKeys(mode: Mode, send: Send) {
+  useEffect(() => {
+    const commands: Record<string, Record<string, string>> = {
+      recording: { enter: "accept", r: "redo", backspace: "undo", u: "undo", escape: "stop" },
+      practice: { escape: "stop", enter: "stop" },
+      live: { escape: "stop", c: "live_clear" },
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const cmd = commands[mode]?.[e.key.toLowerCase()];
+      if (cmd) {
+        e.preventDefault();
+        send(cmd);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, send]);
 }
